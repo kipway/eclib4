@@ -1,0 +1,7 @@
+下面几个文件不需要
+
+gzclose.c
+gzlib.c
+gzread.c
+gzwrite.c
+infback.c
