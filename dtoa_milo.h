@@ -1,9 +1,9 @@
-/*
+Ôªø/*
 \file dtoa_milo.h
 \brief double fast to string
 \author unkown
 
-\adaptation(  ≈‰) jiangyong
+\adaptation(ÈÄÇÈÖç) jiangyong
 \email  kipway@outlook.com
 \update 2024.1.8
 
