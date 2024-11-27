@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update:
+  2024.11.25 replace sessionclient::_pubkey from array to ec::bytes
   2024.11.9  support no ec_alloctor
   2024.2.1   clear include
   2023.11.4  support root_chain pem format
@@ -736,8 +737,6 @@ namespace ec
 				_prsa = nullptr;
 				_pevppk = nullptr;
 				_px509 = nullptr;
-				_pubkeylen = 0;
-				_pubkey[0] = 0;
 				_pkgm.reserve(TLS_REC_BUF_SIZE);
 			}
 			virtual ~sessionclient()
@@ -756,17 +755,15 @@ namespace ec
 			RSA *_prsa;
 			EVP_PKEY *_pevppk;
 			X509* _px509;
-			int _pubkeylen;//The server pubkey length，0 for not use
-			unsigned char _pubkey[1024];//The server pubkey is used to verify the server legitimacy
+			ec::bytes _pubkey;
 		private:
 			bytes _pkgm;
 		public:
 			bool SetServerPubkey(int len, const unsigned char *pubkey)
 			{
-				if (!pubkey || len > (int)sizeof(_pubkey))
+				if (len > 8000)
 					return false;
-				_pubkeylen = len;
-				memcpy(_pubkey, pubkey, len);
+				_pubkey.assign(pubkey, len);
 				return true;
 			}
 
@@ -877,9 +874,9 @@ namespace ec
 				if (!_px509)
 					return false;
 
-				if (_pubkeylen) { // verify the server legitimacy
-					ASN1_BIT_STRING * pstr = X509_get0_pubkey_bitstr(_px509);
-					if (pstr->length != _pubkeylen || memcmp(pstr->data, _pubkey, _pubkeylen)) {
+				if (!_pubkey.empty()) { // verify the server legitimacy
+					ASN1_BIT_STRING* pstr = X509_get0_pubkey_bitstr(_px509);
+					if (pstr->length != (int)_pubkey.size() || memcmp(pstr->data, _pubkey.data(), _pubkey.size())) {
 						X509_free(_px509);
 						_px509 = nullptr;
 						return false;

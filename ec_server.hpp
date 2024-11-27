@@ -59,6 +59,7 @@ window用法
  * 
  * @author jiangyong
  * 更新记录:
+ *   2024-11-25 使用ec::string替换std::string
  *   2024-8-19 使用signal(SIGPIPE, SIG_IGN);忽略SIGPIPE信号
  * 	 2024-4-29 增加windows网络库初始化
  *   2024-1-22 增加DebugRun()用于纯应用层功能调试。Linux启动改为和Windows一致，都需要-start参数。
@@ -98,6 +99,8 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #include <thread>
 #include <cstdint>
 #include <vector>
+#include "ec_vector.hpp"
+#include "ec_string.hpp"
 
 #if defined _WIN32
 void WINAPI g_ServiceMain(DWORD dwArgc, LPTSTR* lpszArgv);
@@ -219,14 +222,14 @@ namespace ec {
 	{
 	protected:
 		int _sigval; //终止信号
-		std::string _workapth; ///!工作目录
-		std::string _instname; ///!实例名/服务名
-		std::string _pidpathfile; ///!全路经的pid文件名
+		ec::string _workapth; ///!工作目录
+		ec::string _instname; ///!实例名/服务名
+		ec::string _pidpathfile; ///!全路经的pid文件名
 #if defined _WIN32
 		SERVICE_STATUS_HANDLE	m_hServiceStatus;
 		SERVICE_STATUS			m_status;
 		char _serviceName[128];
-		std::vector<std::string> _service_argv; //服务的命令行参数
+		ec::vector<ec::string> _service_argv; //服务的命令行参数
 		HANDLE _hMapFile; ///! 共享内存用于存储PID,子进程创建,子进程退出时关闭。
 		HANDLE _hMutex; ///!windows使用命名互拆对象来判断一个驱动实例是否运行。
 #else
@@ -318,13 +321,13 @@ namespace ec {
 			return _instname.c_str();
 		}
 
-		inline void getMutexName(std::string& so) const
+		inline void getMutexName(ec::string& so) const
 		{
 			so = "Global\\";
 			so.append(_instname).append(".mutex");
 		}
 
-		inline void getMapFileName(std::string& so) const
+		inline void getMapFileName(ec::string& so) const
 		{
 			so = "Global\\";
 			so.append(_instname).append(".mapf");
@@ -448,7 +451,7 @@ namespace ec {
 			m_status.dwCheckPoint = 0;
 			m_status.dwWaitHint = 0;
 
-			std::vector<const char*> argv;
+			ec::vector<const char*> argv;
 			for (auto& i : _service_argv)
 				argv.push_back(i.c_str());
 			argv.push_back(NULL);
@@ -657,7 +660,7 @@ namespace ec {
 		*/
 		int getProcessID()
 		{
-			std::string smutex, smapfile;
+			ec::string smutex, smapfile;
 			getMutexName(smutex);
 			getMapFileName(smapfile);
 			
@@ -725,7 +728,7 @@ namespace ec {
 		*/
 		int CreateMessageQueue()
 		{
-			std::string smutex, smapfile;
+			ec::string smutex, smapfile;
 			getMutexName(smutex);
 			getMapFileName(smapfile);
 
@@ -787,7 +790,7 @@ namespace ec {
 		{
 			if (_hMutex && _hMapFile)
 				return 0;
-			std::string smutex, smapfile;
+			ec::string smutex, smapfile;
 			getMutexName(smutex);
 			getMapFileName(smapfile);
 
@@ -1074,7 +1077,7 @@ namespace ec {
 		 * @brief 格式化目录，最后为 '/'
 		 * @param path
 		*/
-		void formatPath(std::string& path)
+		void formatPath(ec::string& path)
 		{
 			for (size_t i = 0; i < path.size(); ++i) {
 				if(path[i] == '\\')
@@ -1089,7 +1092,7 @@ namespace ec {
 		 * @param spath
 		 * @return 0:success; -1:failed
 		*/
-		int getAppPath(std::string& spath)
+		int getAppPath(ec::string& spath)
 		{
 #ifdef _WIN32
 			wchar_t sFilename[1024];

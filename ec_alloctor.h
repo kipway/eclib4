@@ -24,35 +24,6 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #define _ZLIB_SELF_ALLOC
 #define _HAS_EC_ALLOCTOR
 
-#ifndef _WIN32
-#include <malloc.h>
-namespace ec {
-	struct glibc_noarena
-	{
-		glibc_noarena() {
-			mallopt(M_ARENA_MAX, 1);
-#if defined(_MEM_TINY) // < 256M
-			mallopt(M_MMAP_THRESHOLD, 64 * 1024);
-			mallopt(M_TRIM_THRESHOLD, 64 * 1024);
-#elif defined(_MEM_SML) // < 1G
-			mallopt(M_MMAP_THRESHOLD, 256 * 1024);
-			mallopt(M_TRIM_THRESHOLD, 256 * 1024);
-#else
-			mallopt(M_MMAP_THRESHOLD, 1024 * 1024);
-			mallopt(M_TRIM_THRESHOLD, 1024 * 1024);
-#endif
-		}
-	};
-}
-#else
-namespace ec {
-	struct glibc_noarena
-	{
-	};
-}
-#endif
-#define DECLARE_EC_GLIBC_NOARENA ec::glibc_noarena g_ec_glibc_noarena;
-
 #include "ec_mutex.h"
 #ifndef EC_ALLOCTOR_ALIGN
 #define EC_ALLOCTOR_ALIGN 8u
@@ -60,7 +31,7 @@ namespace ec {
 
 #ifndef EC_ALLOCTOR_SHEAP_SIZE  // small heap size
 #if defined(_MEM_TINY) // < 256M
-#define EC_ALLOCTOR_SHEAP_SIZE (80 * 1024) // 80K heap size
+#define EC_ALLOCTOR_SHEAP_SIZE (64 * 1024) // 80K heap size
 #elif defined(_MEM_SML) // < 1G
 #define EC_ALLOCTOR_SHEAP_SIZE (256 * 1024) // 256K heap size
 #else
@@ -101,6 +72,27 @@ namespace ec {
 #ifndef EC_SIZE_BLK_ALLOCATOR
 #define EC_SIZE_BLK_ALLOCATOR 40
 #endif
+
+#ifndef _WIN32
+#include <malloc.h>
+namespace ec {
+	struct glibc_noarena
+	{
+		glibc_noarena() {
+			mallopt(M_ARENA_MAX, 1);
+			mallopt(M_MMAP_THRESHOLD, EC_ALLOCTOR_SHEAP_SIZE);
+			mallopt(M_TRIM_THRESHOLD, EC_ALLOCTOR_SHEAP_SIZE);
+		}
+	};
+}
+#else
+namespace ec {
+	struct glibc_noarena
+	{
+	};
+}
+#endif
+#define DECLARE_EC_GLIBC_NOARENA ec::glibc_noarena g_ec_glibc_noarena;
 
 namespace ec {
 	class null_lock final // null lock
@@ -697,9 +689,15 @@ ec::allocator* get_ec_allocator();
 class ec_allocator_ {
 public:
 	ec_allocator_() {
+#ifdef _MEM_TINY
+		size_t sheaps[8]{ 24, 40, 64, 128, 256, 512, 1024, 2 * 1024 };
+		size_t mheaps[4]{ 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024 };
+		size_t hheaps[4]{ 64 * 1024, 128 * 1024, 256 * 1024, 512 * 1024 };
+#else
 		size_t sheaps[12]{ 24, 40, 64, 96, 128, 256, 384, 512, 640, 800, 1024, 1424 };
-		size_t mheaps[10]{ 2* 1024, 3 * 1024, 5 * 1024, 8 * 1024, 12 * 1024, 16 * 1024, 20 * 1024, 24 * 1024, 32 * 1024, 48 * 1024 };
+		size_t mheaps[10]{ 2 * 1024, 3 * 1024, 5 * 1024, 8 * 1024, 12 * 1024, 16 * 1024, 20 * 1024, 24 * 1024, 32 * 1024, 48 * 1024 };
 		size_t hheaps[8]{ 64 * 1024, 128 * 1024, 256 * 1024, 400 * 1024, 640 * 1024, 1024 * 1024, 2 * 1024 * 1024 , 4 * 1024 * 1024 };
+#endif
 
 		for (auto i = 0u; i < sizeof(sheaps) / sizeof(size_t); i++) {
 			if (EC_ALLOCTOR_SHEAP_SIZE / sheaps[i] < 4)

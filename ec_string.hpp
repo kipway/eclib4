@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update 
+2024.11.25 adjust memory grown
 2024.11.9 support none ec_alloctor
 2024.2.1  move ec::fixstring_ to ec_string.h, add string_::appendformat()
 2023.8.10 add nul end in debug
@@ -30,7 +31,6 @@ namespace ec
 {
 	struct null_stralloctor { // use C malloc
 		void* realloc_(void* ptr, size_t zr, size_t* poutsize) {
-			zr *= 2;
 			if (zr % 8u)
 				zr += 8u - zr % 8u;
 			if (zr < 16u)
@@ -47,7 +47,6 @@ namespace ec
 	struct ec_string_alloctor { // use ec_alloctor
 		void* realloc_(void* ptr, size_t size, size_t* poutsize)
 		{
-			size *= 2;
 			if (size % 8u)
 				size += 8u - size % 8u;
 			if (size < 16u)
@@ -107,7 +106,7 @@ namespace ec
 				str = nullptr;
 			}
 		}
-		bool recapacity(size_t strsize, bool extmore = false)
+		bool recapacity(size_t strsize)
 		{
 			if (!strsize) {
 				sfree(_pstr);
@@ -115,7 +114,7 @@ namespace ec
 			}
 			if (strsize <= capacity())
 				return true;
-			pointer pnew = srealloc(extmore ? strsize + strsize / 2 : strsize);
+			pointer pnew = srealloc(strsize < 16000 ? strsize * 2 : (strsize + strsize / 2));
 			if (!pnew)
 				return false;
 			_pstr = pnew;
@@ -261,7 +260,12 @@ namespace ec
 		}
 		inline void reserve(size_t n = 0) noexcept
 		{
-			recapacity(n);
+			if (n <= capacity())
+				return;
+			pointer pnew = srealloc(n);
+			if (pnew) {
+				_pstr = pnew;
+			}
 		}
 		void shrink_to_fit()
 		{
@@ -453,13 +457,9 @@ namespace ec
 				return *this;
 			size_t zlen = size();
 			if (pos >= zlen)
-				return append(c);
-			if (zlen + n > capacity()) {
-				pointer pnewstr = srealloc(zlen + n);
-				if (!pnewstr)
-					return *this;
-				_pstr = pnewstr;
-			}
+				return append(n ,c);
+			if(!recapacity(zlen + n))
+				return *this;
 			memmove(_pstr + pos + n, _pstr + pos, zlen - pos);
 			if (1 == n) {
 				*(_pstr + pos) = c;
@@ -480,12 +480,8 @@ namespace ec
 			size_t zlen = size();
 			if (pos >= zlen)
 				return append(s, n);
-			if (zlen + n > capacity()) {
-				pointer pnewstr = srealloc(zlen + n);
-				if (!pnewstr)
-					return *this;
-				_pstr = pnewstr;
-			}
+			if (!recapacity(zlen + n))
+				return *this;
 			memmove(_pstr + pos + n, _pstr + pos, zlen - pos);
 			memcpy(_pstr + pos, s, n);
 			setsize_(_pstr, zlen + n);

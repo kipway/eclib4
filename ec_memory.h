@@ -2,7 +2,8 @@
 \file ec_memory.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 
+\update
+  2024-11.25 add class ec::blk_alloctor_g
   2024.11.9 support none ec_alloctor
   2023-5-21 update io_buffer
   2023-5-13 autobuf remove ec::memory
@@ -165,6 +166,30 @@ namespace ec {
 		}
 	};
 
+	class blk_alloctor_g final  //全局内存块分配器，ec::tcp_c使用
+	{
+	private:
+		size_t _sizeblk; // 内存块的大小
+	public:
+		blk_alloctor_g(size_t sizeblk, size_t numblk) : _sizeblk(sizeblk)
+		{
+		}
+		inline size_t sizeblk() const
+		{
+			return _sizeblk;
+		}
+		void* malloc_(size_t size, size_t* poutsize)
+		{
+			return ec::g_malloc(size, poutsize);
+		}
+		void free_(void* p)
+		{
+			if (p) {
+				ec::g_free(p);
+			}
+		}
+	};
+
 #ifndef _HAS_EC_ALLOCTOR
 	class null_locker final // null lock
 	{
@@ -193,12 +218,11 @@ namespace ec {
 			}
 			return ::malloc(size);
 		}
-		bool free_(void* p)
+		void free_(void* p)
 		{
 			if (p) {
 				::free(p);
 			}
-			return true;
 		}
 	};
 #endif

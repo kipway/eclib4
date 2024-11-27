@@ -43,7 +43,7 @@ namespace ec
 			_sb64ret[0] = 0;
 			_wscompress = ws_permessage_deflate;
 			_umask = (uint32_t)::time(nullptr);
-			_wsmsg.reserve(1024 * 16);
+			_wsmsg.reserve(1000 * 16);
 		}
 	protected:
 		ilog* _plog;

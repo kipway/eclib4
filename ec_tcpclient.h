@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
+  2024.11.25 增加ec::alloctor new支持
   2024.6.7  sock5代理也改为异步发送,增加多客户端netio事件监听. 
   2024.4.25 改为异步发送,自带发送缓冲管理.
   2023.8.10 add send timeout micro define
@@ -35,7 +36,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #endif
 
 #ifndef EC_TCP_CLIENT_SNDBUF_BLKSIZE
-#define EC_TCP_CLIENT_SNDBUF_BLKSIZE (1024 * 32)
+#define EC_TCP_CLIENT_SNDBUF_BLKSIZE (32 * 1024)
 #endif
 
 #ifndef EC_TCP_CLIENT_SNDBUF_MAXSIZE
@@ -61,6 +62,7 @@ namespace ec
 			st_connected = 4,   // connected
 			st_logined
 		};
+		_USE_EC_OBJ_ALLOCATOR
 	protected:
 		st_sock	_status;
 		SOCKET _sock;
@@ -76,9 +78,9 @@ namespace ec
 		bytes _rs5buf; // buf for socks5 request
 		bool _btcpnodelay;  // default false
 		bool _btcpkeepalive; // default true
-		ec::blk_alloctor<> _sndbufblks; //发送缓冲分配区
-		ec::io_buffer<> _sndbuf;//发送缓冲
-		uint8_t _rbuf[1024 * 20];
+		blk_alloctor_g _sndbufblks;
+		ec::io_buffer<blk_alloctor_g> _sndbuf;//发送缓冲
+		uint8_t _rbuf[1024 * 18];
 	public:
 		tcp_c() : _status(st_invalid)
 			, _sock(INVALID_SOCKET)

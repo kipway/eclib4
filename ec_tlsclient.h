@@ -90,7 +90,7 @@ namespace ec
 		virtual void onreadbytes(const uint8_t* p, int nbytes)
 		{
 			bytes pkg;
-			pkg.reserve(1024 * 16);
+			pkg.reserve(1000 * 16);
 			int nst = _tls.OnTcpRead(p, nbytes, &pkg);
 			if (TLS_SESSION_ERR == nst || TLS_SESSION_OK == nst || TLS_SESSION_NONE == nst) {
 				if (pkg.size())

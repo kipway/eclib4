@@ -198,7 +198,7 @@ namespace ec
 				fseek(pf, 0, SEEK_SET);
 			char s[1024 * 8];
 
-			sout.reserve(1024 * 16);
+			sout.reserve(1000 * 16);
 			size_t sz;
 			while ((sz = fread(s, 1, sizeof(s), pf)) > 0)
 				sout.append(s, sz);
