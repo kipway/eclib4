@@ -116,16 +116,16 @@ namespace ec
 		len = i2d_X509(px509, nullptr);
 		if (len < 0)
 			return false;
-		buf = (unsigned char*)::malloc(len + 1);
+		buf = (unsigned char*)ec::g_malloc(len + 1);
 		pdobuf = buf;
 		if (i2d_X509(px509, &pdobuf) < 0) {
-			::free(buf);
+			ec::g_free(buf);
 			return false;
 		}
 		out.clear();
 		using ctype = typename _strOut::value_type;
 		out.assign((const ctype*)buf, len);
-		::free(buf);
+		ec::g_free(buf);
 		return true;
 	}
 

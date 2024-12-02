@@ -74,6 +74,7 @@ namespace ec
 		virtual void setlevel(int lev) = 0;
 		virtual void runtime() = 0;
 		virtual void release() = 0;
+		_USE_EC_OBJ_ALLOCATOR
 	private:
 		struct t_logi {
 			int v;

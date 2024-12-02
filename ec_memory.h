@@ -362,7 +362,7 @@ namespace ec {
 				if (!_ptail || blkfull(_ptail)) {
 					if (oversize())
 						return false;
-					blk_* p = (blk_*)_pallocator->malloc_(_pallocator->sizeblk(), nullptr);
+					blk_* p = (blk_*)_pallocator->malloc_(nullptr);
 					if (!p)
 						return false;
 					new(p)blk_();

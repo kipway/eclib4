@@ -728,7 +728,7 @@ namespace ec
 			int i;
 			if (nsize <= 0)
 				nsize = 16;
-			_items = (T_I*)malloc(nsize * sizeof(T_I));
+			_items = (T_I*)ec::g_malloc(nsize * sizeof(T_I));
 			if (!_items)
 				_nsize = 0;
 			else
@@ -740,7 +740,7 @@ namespace ec
 		virtual ~cBps()
 		{
 			if (_items) {
-				free(_items);
+				ec::g_free(_items);
 				_items = nullptr;
 			}
 			_nsize = 0;

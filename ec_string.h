@@ -498,7 +498,7 @@ namespace ec
 				sizetmp = MultiByteToWideChar(WIN_CP_UTF8, 0, in, (int)sizein, NULL, 0);
 				if (!sizetmp)
 					break;
-				sUnicode = (wchar_t*)malloc(sizeof(wchar_t) * (sizetmp + 1));
+				sUnicode = (wchar_t*)ec::g_malloc(sizeof(wchar_t) * (sizetmp + 1));
 				if (!sUnicode)
 					break;
 			}
@@ -513,7 +513,7 @@ namespace ec
 			break;
 		}
 		if (sUnicode != wtmp)
-			free(sUnicode);
+			ec::g_free(sUnicode);
 		return nret;
 #else
 		iconv_t cd;
@@ -550,7 +550,7 @@ namespace ec
 				sizetmp = MultiByteToWideChar(WIN_CP_GBK, 0, in, (int)sizein, NULL, 0);
 				if (!sizetmp)
 					break;
-				sUnicode = (wchar_t*)malloc(sizeof(wchar_t) * (sizetmp + 1));
+				sUnicode = (wchar_t*)ec::g_malloc(sizeof(wchar_t) * (sizetmp + 1));
 				if (!sUnicode)
 					break;
 			}
@@ -565,7 +565,7 @@ namespace ec
 			break;
 		}
 		if (sUnicode != wtmp)
-			free(sUnicode);
+			ec::g_free(sUnicode);
 		return nret;
 #else
 		iconv_t cd;
