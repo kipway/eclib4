@@ -3,8 +3,9 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
-  2024-11.25 add class ec::blk_alloctor_g
-  2024.11.9 support none ec_alloctor
+  2024-12-02 update with ec_alloctor.h
+  2024-11-25 add class ec::blk_alloctor_g
+  2024-11-9 support none ec_alloctor
   2023-5-21 update io_buffer
   2023-5-13 autobuf remove ec::memory
   2023-5-8 add ec::memory::maxblksize()
@@ -178,9 +179,9 @@ namespace ec {
 		{
 			return _sizeblk;
 		}
-		void* malloc_(size_t size, size_t* poutsize)
+		void* malloc_(size_t* poutsize)
 		{
-			return ec::g_malloc(size, poutsize);
+			return ec::g_malloc(_sizeblk, poutsize);
 		}
 		void free_(void* p)
 		{
@@ -211,12 +212,12 @@ namespace ec {
 		{
 			return _sizeblk;
 		}
-		void* malloc_(size_t size, size_t* poutsize)
+		void* malloc_(size_t* poutsize)
 		{
 			if (poutsize) {
-				*poutsize = size;
+				*poutsize = _sizeblk;
 			}
-			return ::malloc(size);
+			return ::malloc(_sizeblk);
 		}
 		void free_(void* p)
 		{

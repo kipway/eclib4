@@ -32,7 +32,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 #ifndef EC_ALLOCTOR_SHEAP_SIZE  // small heap size
 #if defined(_MEM_TINY) // < 256M
-#define EC_ALLOCTOR_SHEAP_SIZE (64 * 1024) // 80K heap size
+#define EC_ALLOCTOR_SHEAP_SIZE (64 * 1024) // 64K heap size
 #elif defined(_MEM_SML) // < 1G
 #define EC_ALLOCTOR_SHEAP_SIZE (256 * 1024) // 256K heap size
 #else
@@ -803,8 +803,8 @@ public:
 	ec_allocator_(): _alloctor_self(SELFOBJ_AREA_SIZE, ec::zselfblksize) {
 #if defined(_MEM_TINY) || defined(_MEM_SML)
 		size_t sheaps[8]{ 16, 32, 64, 128, 256, 512, 1024, 2 * 1024 };
-		size_t mheaps[4]{ 4 * 1024, 8 * 1024, 16 * 1024, 32 * 1024 };
-		size_t lheaps[2]{ 64 * 1024, 128 * 1024 };
+		size_t mheaps[3]{ 4 * 1024, 8 * 1024, 16 * 1024};
+		size_t lheaps[3]{ 32 * 1024, 64 * 1024, 128 * 1024 };
 		size_t hheaps[3]{ 256 * 1024, 512 * 1024, 1024 * 1024 };
 #else
 		size_t sheaps[12]{ 16, 32, 64, 96, 128, 256, 384, 512, 640, 800, 1024, 1424 };
