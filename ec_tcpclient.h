@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
+  2024.12.5 增加发送完成通知
   2024.11.25 增加ec::alloctor new支持
   2024.6.7  sock5代理也改为异步发送,增加多客户端netio事件监听. 
   2024.4.25 改为异步发送,自带发送缓冲管理.
@@ -72,9 +73,9 @@ namespace ec
 		char _s5domain[40]; //socks5 domain parameter
 		uint16_t _s5port; //socks5 port parameter
 
-		int _timeover_connect_sec;//connect timeout seconds
-	private:
+		int _timeover_connect_sec;//connect timeout seconds	
 		time_t _timeconnect; //start connect time.
+	private:
 		bytes _rs5buf; // buf for socks5 request
 		bool _btcpnodelay;  // default false
 		bool _btcpkeepalive; // default true
@@ -103,7 +104,12 @@ namespace ec
 			_btcpnodelay = bnodelay;
 			_btcpkeepalive = bkeepalive;
 		}
-
+		inline void setmaxsndbufsize(size_t size) {
+			_sndbuf.setsizemax(size);
+		}
+		inline size_t getsndbufsize() {
+			return _sndbuf.size();
+		}
 		virtual ~tcp_c()
 		{
 			if (INVALID_SOCKET != _sock) {
@@ -186,6 +192,7 @@ namespace ec
 				_status = st_invalid;
 				if(notify)
 					ondisconnected();
+				_sndbuf.clear();
 			}
 		}
 
@@ -232,6 +239,14 @@ namespace ec
 		virtual void onreadbytes(const uint8_t* p, int nbytes) = 0;
 
 		virtual void onidle()
+		{
+		}
+		/**
+		 * @brief on send out bytes
+		 * @param sizeSnd size be send out
+		 * @param sizeBuf size left in buffer
+		 */
+		virtual void onSendOut(size_t sizeSnd, size_t sizeBuf)
 		{
 		}
 	public:
@@ -339,6 +354,9 @@ namespace ec
 				ns = net::_send_non_block(_sock, pc, nsize);
 				if (ns < 0 || (ns < nsize && !_sndbuf.append(pc + ns, nsize - ns))) {
 					return -1;
+				}
+				if (ns > 0) {
+					onSendOut(ns, _sndbuf.size());
 				}
 			}
 			else { //非空，先追加到缓冲, 再发送
@@ -512,6 +530,9 @@ namespace ec
 				nsall += ns;
 				_sndbuf.freesize(ns);
 				pc = (const char*)_sndbuf.get(zlen);
+			}
+			if (nsall > 0) {
+				onSendOut(nsall, _sndbuf.size());
 			}
 			return nsall;
 		}

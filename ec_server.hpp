@@ -59,6 +59,7 @@ window用法
  * 
  * @author jiangyong
  * 更新记录:
+ *   2024-12-6 增加关闭Windows服务模式
  *   2024-11-25 使用ec::string替换std::string
  *   2024-8-19 使用signal(SIGPIPE, SIG_IGN);忽略SIGPIPE信号
  * 	 2024-4-29 增加windows网络库初始化
@@ -226,6 +227,7 @@ namespace ec {
 		ec::string _instname; ///!实例名/服务名
 		ec::string _pidpathfile; ///!全路经的pid文件名
 #if defined _WIN32
+		int _noservice{ 0 };//无服务,默认开启
 		SERVICE_STATUS_HANDLE	m_hServiceStatus;
 		SERVICE_STATUS			m_status;
 		char _serviceName[128];
@@ -240,7 +242,12 @@ namespace ec {
 		int	m_nlockfile; ///!linux版使用pid文件锁来判断一个驱动实例是否运行, 后台服务需要使用。
 		int _msgqueueid;///!主进程创建的临时消息队列ID，接收子进程发送的启动和停止信息, 主进程退出时，调用msgctrl清除队列，否则会在系统中存留。
 #endif
-
+	public:
+		void SetNoWindowsService() {
+#ifdef _WIN32
+			_noservice = 1;
+#endif
+		}
 	protected: //应用层需重载的启动，停止，运行三个函数, 参见例子 testserver.cpp
 		/**
 		 * @brief 子进程创建后调用，启动相当普通应用的于main函数
@@ -524,6 +531,8 @@ namespace ec {
 
 		BOOL isService(int viewinfo = 1)
 		{
+			if (_noservice)
+				return false;
 			BOOL bResult = FALSE;
 			SC_HANDLE hSCM = ::OpenSCManager(NULL, NULL, SC_MANAGER_CONNECT);
 			if (hSCM != NULL) {
@@ -843,7 +852,7 @@ namespace ec {
 		 * @param pos 消息位置,主进程和子进程pos参数不一样。
 		 * @return -1:error; >=0 :读到的消息的字符数
 		*/
-		int ReadMessage(std::string& so, int pos)
+		int ReadMessage(ec::string& so, int pos)
 		{
 			so.clear();
 			if (!_hMapFile || !_hMutex || pos + _CTRLMAPBUF_ORDERSIZE > _CTRLMAPBUF_SIZE)
@@ -953,7 +962,7 @@ namespace ec {
 		 * @param pos 该参数被忽略
 		 * @return -1:error; >=0 :读到的消息的字符数
 		*/
-		int ReadMessage(std::string& so, int pos)
+		int ReadMessage(ec::string& so, int pos)
 		{
 			so.clear();
 			if (_msgqueueid < 0)
@@ -1144,7 +1153,7 @@ namespace ec {
 			setsid(); // become session leader,不再接收父进程退出时系统发的SIGHUP信号
 			CloseIO();
 #endif
-			std::string order;
+			ec::string order;
 			while (-1 == _sigval) {
 				RunTime();
 #ifdef _WIN32
@@ -1380,7 +1389,7 @@ namespace ec {
 			}
 			//下面检查是否运行，创建子进程在后台运行。
 #ifdef _WIN32
-			std::string cmdline = argv[0];
+			ec::string cmdline = argv[0];
 			cmdline.append(" -service"); //子进程普通模式运行
 			for (i = 2; i < argc; i++) {
 				cmdline.push_back(' ');
@@ -1449,7 +1458,7 @@ namespace ec {
 				return -1;
 			}
 #endif
-			std::string order;
+			ec::string order;
 			int timeout = 10 * 1000, nst = 0;
 			while (timeout > 0) {
 #ifdef _WIN32
@@ -1458,7 +1467,7 @@ namespace ec {
 				if (0 == nst) {
 					if (ReadMessage(order, _CTRLMAPBUF_ORDEROUTPOS) > 0) {
 						if (!strcmp("start_success", order.c_str())) {
-							printf("start %s success PID=%d\n", _instname.c_str(), npid);
+							printf("start %s success. PID = %d\n", _instname.c_str(), npid);
 							break;
 						}
 						else if (!strcmp("start_failed", order.c_str())) {
@@ -1491,7 +1500,7 @@ namespace ec {
 #endif
 			int npid = getProcessID();
 			if (npid > 0) {
-				printf("%s is running! pid = %d\n", _instname.c_str(), npid);
+				printf("%s is running. PID = %d\n", _instname.c_str(), npid);
 				return npid;
 			}
 			else if (npid < 0) {
@@ -1547,13 +1556,13 @@ namespace ec {
 			kill(npid, 15);
 #endif			
 			//检查正常退出消息
-			std::string smsg;
+			ec::string smsg;
 			int timeout = 15 * 1000, nst; //15超时
 			while (timeout > 0) {
 				nst = ReadMessage(smsg, _CTRLMAPBUF_ORDEROUTPOS);
 				if (nst > 0) {
 					if (!strcmp("stopped_success", smsg.c_str())) {
-						printf("stopped %s success PID=%d\n", _instname.c_str(), npid);
+						printf("stop %s success. PID = %d\n", _instname.c_str(), npid);
 						break;
 					}
 				}

@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
+  2024.12.12 add out_json()
   2024.11.9 support no ec_alloctor
   2023.9.5  fix number_outstring(double v, _STR& sout)
   2023.8.17 Support jbool and jnull
@@ -864,6 +865,17 @@ namespace ec
 			sout.push_back('"');
 			sout.append(key).append("\":");
 			val.tojson(sout);
+		}
+
+		template<typename _CLS, typename _STROUT>
+		void out_json(int& nf, const char* key, _CLS& jstr, _STROUT& sout)
+		{
+			if (nf)
+				sout.push_back(',');
+			++nf;
+			sout.push_back('"');
+			sout.append(key).append("\":");
+			sout.append(jstr.data(), jstr.size());
 		}
 
 		template<typename _CLS, typename _STROUT>

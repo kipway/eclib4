@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
+  2024-12-05 add io_buffer::setsizemax() and parsebuffer::bufsize()
   2024-12-02 update with ec_alloctor.h
   2024-11-25 add class ec::blk_alloctor_g
   2024-11-9 support none ec_alloctor
@@ -338,6 +339,9 @@ namespace ec {
 		inline size_t sizemax() {
 			return _sizemax;
 		}
+		inline void setsizemax(size_t sizemax) {
+			_sizemax = sizemax;
+		}
 		int waterlevel() //水位,百分数.
 		{
 			size_t numblk = _size * 10000;
@@ -497,7 +501,9 @@ namespace ec {
 		{
 			return _tail - _head;
 		}
-
+		inline size_t bufsize() const {
+			return _bufsize;
+		}
 		inline bool empty() const{
 			return !_pbuf || (_tail == _head);
 		}

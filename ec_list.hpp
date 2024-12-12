@@ -3,6 +3,8 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
+  2024.12.12 pushval参数改为引用
+  2024.12.6 增加单一pop删除函数
   2024.5.22 增加遍历函数,增加复制pushval()
 
 ec::lckfree_list
@@ -69,7 +71,7 @@ namespace ec
 			if (_pevt)
 				_pevt->SetEvent();
 		}
-		void pushval(value_type val)
+		void pushval(value_type& val)
 		{
 			t_node* pnew = new t_node;
 			pnew->value = val;
@@ -86,6 +88,16 @@ namespace ec
 			t_node* pre = _phead;
 			_phead = _phead->pnext;
 			val = std::move(_phead->value);
+			if (pre != &_nulnode)
+				delete pre;
+			_size--;
+			return true;
+		}
+		bool pop() {
+			if (!_phead->pnext)
+				return false;
+			t_node* pre = _phead;
+			_phead = _phead->pnext;
 			if (pre != &_nulnode)
 				delete pre;
 			_size--;

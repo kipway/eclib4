@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update 
+  2024.12.5 add readFixedString() and writeFixedString()
   2024.11.9 support none ec_alloctor
   2023.7.5 add vstream::clear()
   2023.5.15 add vstream
@@ -74,6 +75,28 @@ namespace ec
 			return *this;
 		}
 
+		template<class STR = std::string, class = typename std::enable_if<std::is_class<STR>::value>::type>
+		vstream& readFixedString(STR& sout, size_t lenFixed)
+		{
+			sout.clear();
+			if (_pos + lenFixed > size()) {
+				throw std::range_error("oversize");
+				return *this;
+			}
+			sout.resize(lenFixed);
+			memcpy((void*)sout.data(), data() + _pos, lenFixed);
+			_pos += lenFixed;
+			auto i = 0u;
+			while (i < lenFixed) {
+				if (!sout[i]) {
+					sout.resize(i);
+					break;
+				}
+				++i;
+			}
+			return *this;
+		}
+
 		vstream& write(const void *pdata, size_t wsize)
 		{ // write block to current positiion
 			if (_pos + wsize > size()) {
@@ -81,6 +104,44 @@ namespace ec
 			}
 			memcpy(data() + _pos, pdata, wsize);
 			_pos += wsize;
+			return *this;
+		}
+
+		vstream& writeFixedString(const char* s, size_t lenFixed)
+		{ // write block to current positiion
+			if (_pos + lenFixed > size()) {
+				resize(_pos + lenFixed);
+			}
+			size_t zl = 0;
+			if (s && *s) {
+				zl = strlen(s);
+				if (zl > lenFixed)
+					zl = lenFixed;
+				memcpy((uint8_t*)data() + _pos, s, zl);
+			}
+			if (zl < lenFixed) {
+				memset((uint8_t*)data() + _pos + zl, 0, lenFixed - zl);
+			}
+			_pos += lenFixed;
+			return *this;
+		}
+
+		template<class STR = std::string, class = typename std::enable_if<std::is_class<STR>::value>::type>
+		vstream& writeFixedString(STR s, size_t lenFixed)
+		{ // write block to current positiion
+			if (_pos + lenFixed > size()) {
+				resize(_pos + lenFixed);
+			}
+			size_t zl = s.size();
+			if (zl > lenFixed)
+				zl = lenFixed;
+			if (zl) {
+				memcpy((uint8_t*)data() + _pos, s.data(), zl);
+			}
+			if (zl < lenFixed) {
+				memset((uint8_t*)data() + _pos + zl, 0, lenFixed - zl);
+			}
+			_pos += lenFixed;
 			return *this;
 		}
 
