@@ -4,6 +4,7 @@
 * 
 * @author jiangyong
 * @update
+  2024-12-30 优化udp的发送
   2024-11-9 support no ec_alloctor
   2024-5-8 增加主动断开处理，用于发送websocket断开控制帧。
   2024-4-13 增加onSendBufSizeChanged()
@@ -33,6 +34,9 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 #ifndef FRMS_UDP_READ_ONCE
 #define FRMS_UDP_READ_ONCE  64 //UDP每次读的包数
+#endif
+#ifndef FRMS_UDP_SEND_ONCE
+#define FRMS_UDP_SEND_ONCE 8
 #endif
 namespace ec {
 	namespace aio {
@@ -298,7 +302,7 @@ namespace ec {
 					return;
 
 				int64_t curmstime = ec::mstime();
-				if (llabs(curmstime - _lastmstime) >= 5) { //5毫秒处理一次接收流控
+				if (llabs(curmstime - _lastmstime) >= 4) { //4毫秒处理一次接收流控
 					dorecvflowctrl();
 					_lastmstime = curmstime;
 				}
@@ -328,11 +332,28 @@ namespace ec {
 
 			void udp_trigger(int kfd, bool bsend)
 			{
-				if(bsend)
-					udp_sendto(kfd);
 				struct epoll_event evtmod;
 				memset(&evtmod, 0, sizeof(evtmod));
 				evtmod.events = bsend ? EPOLLIN | EPOLLOUT | EPOLLERR : EPOLLIN | EPOLLERR;
+				evtmod.data.fd = kfd;
+				int nerr = 0;
+				if (0 != (nerr = _net.epoll_ctl_(_fdepoll, EPOLL_CTL_MOD, kfd, &evtmod)))
+					_plog->add(CLOG_DEFAULT_ERR, "udp epoll_ctrl_ EPOLL_CTL_MOD failed @onevent. fd = %d,  error = %d", kfd, nerr);
+			}
+
+			void udp_trigger(int kfd)
+			{
+				psession pss = getSession(kfd);
+				int nbuf = 0;
+				if (pss) {
+					udb_buffer_* pfrms = pss->getudpsndbuffer();
+					if (pfrms && !pfrms->empty()) {
+						nbuf = 1;
+					}
+				}
+				struct epoll_event evtmod;
+				memset(&evtmod, 0, sizeof(evtmod));
+				evtmod.events = nbuf ? EPOLLIN | EPOLLOUT | EPOLLERR : EPOLLIN | EPOLLERR;
 				evtmod.data.fd = kfd;
 				int nerr = 0;
 				if (0 != (nerr = _net.epoll_ctl_(_fdepoll, EPOLL_CTL_MOD, kfd, &evtmod)))
@@ -423,12 +444,10 @@ namespace ec {
 			{
 				psession pss = getSession(kfd);
 				if (!pss) {
-					udp_trigger(kfd, 0);
 					return;
 				}
 				udb_buffer_* pfrms = pss->getudpsndbuffer();
 				if (!pfrms || pfrms->empty()) {
-					udp_trigger(kfd, 0);
 					return;
 				}
 				int numsnd = 0, nbytes = 0;
@@ -436,7 +455,7 @@ namespace ec {
 					auto& frm = pfrms->front();
 					if (!frm.empty()) {
 						if (_net.sendto_(kfd, frm.data(), frm.size(), frm.getnetaddr(), frm.netaddrlen()) < 0) {
-							if (EAGAIN != errno) {
+							if (EAGAIN != errno && EWOULDBLOCK != errno && ENOBUFS != errno) {
 								onSendtoFailed(kfd, frm.getnetaddr(), frm.netaddrlen(), frm.data(), frm.size(), errno);
 								pfrms->pop();
 							}
@@ -458,7 +477,7 @@ namespace ec {
 					}
 					pfrms->pop();
 					numsnd++;
-				} while (!pfrms->empty() && numsnd < 16 && nbytes < 1024 * 32);
+				} while (!pfrms->empty() && numsnd < FRMS_UDP_SEND_ONCE && nbytes < 1024 * 32);
 				pss->onUdpSendCount(numsnd, nbytes);
 				onSendCompleted(kfd, nbytes);
 			}
@@ -483,7 +502,7 @@ namespace ec {
 							if (onReceivedFrom(evt.data.fd, udpbuf_, nr, paddr, *paddrlen) < 0)
 								break;
 						}
-						else if (nr < 0 && EAGAIN != errno) {
+						else if (nr < 0 && EAGAIN != errno && EWOULDBLOCK != errno) {
 							_plog->add(CLOG_DEFAULT_ERR, "fd(%d) recvfrom failed. error %d", evt.data.fd, errno);
 						}
 						--ndo;
@@ -502,6 +521,7 @@ namespace ec {
 				int nfdtype = _net.getfdtype(evt.data.fd);
 				if (nfdtype == _net.fd_udp) {
 					onudpevent(evt);
+					udp_trigger(evt.data.fd);
 					return;
 				}
 				if ((evt.events & EPOLLIN) && _net.fd_listen == nfdtype) {
@@ -614,6 +634,9 @@ namespace ec {
 				}
 				if (pss->_sndbuf.empty()) {
 					if (!pss->onSendCompleted()) {
+						if (_plog) {
+							_plog->add(CLOG_DEFAULT_WRN, "fd(%d) onSendCompleted false.", kfd);
+						}
 						closefd(kfd, 0);//主动断开
 						return -1;
 					}

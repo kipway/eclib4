@@ -3,7 +3,8 @@
 * base net server class use IOCP for windows
 * @author jiangyong
 * @update
-    2024.11.9 support no ec_alloctor
+	2024-12-30 优化udp发送
+	2024.11.9 support no ec_alloctor
 	2024-7-28 修复oniocp_accept未判断nextfd返回-1满链接场景
 	2024-5-8 增加主动断开处理，用于发送websocket断开控制帧。
 	2024-4-29 删除windows网络库初始化，移到ec::CServerApp中
@@ -50,6 +51,9 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 
 #ifndef EC_AIO_UDP_NUMOVL
 #define EC_AIO_UDP_NUMOVL  8
+#endif
+#ifndef FRMS_UDP_SEND_ONCE
+#define FRMS_UDP_SEND_ONCE 8
 #endif
 namespace ec {
 	namespace aio {
@@ -512,7 +516,7 @@ namespace ec {
 					return -1;
 
 				int64_t curmstime = ec::mstime();
-				if (llabs(curmstime - _lastmstime) >= 5) { //5毫秒任务
+				if (llabs(curmstime - _lastmstime) >= 4) { //4毫秒任务
 					dorecvflowctrl();//流控处理
 					doaysnconnectout();//连出处理
 					_lastmstime = curmstime;
@@ -924,7 +928,7 @@ namespace ec {
 					pfd->post_snd += 1;
 					nsend += (int)pol->wsbuf.len;
 					nsndFrms++;
-				} while (nsend < 1024 * 32);
+				} while (nsndFrms < FRMS_UDP_SEND_ONCE && nsend < 1024 * 32);
 				psession pss = getSession(kfd);
 				if (pss)
 					pss->onUdpSendCount(nsndFrms, nsend);

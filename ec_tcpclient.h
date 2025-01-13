@@ -37,7 +37,11 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #endif
 
 #ifndef EC_TCP_CLIENT_SNDBUF_BLKSIZE
+#if defined(_MEM_TINY) // < 256M
+#define EC_TCP_CLIENT_SNDBUF_BLKSIZE (16 * 1024)
+#else
 #define EC_TCP_CLIENT_SNDBUF_BLKSIZE (32 * 1024)
+#endif
 #endif
 
 #ifndef EC_TCP_CLIENT_SNDBUF_MAXSIZE
@@ -80,7 +84,7 @@ namespace ec
 		bool _btcpnodelay;  // default false
 		bool _btcpkeepalive; // default true
 		blk_alloctor_g _sndbufblks;
-		ec::io_buffer<blk_alloctor_g> _sndbuf;//发送缓冲
+		ec::io_buffer<blk_alloctor_g> _sndbuf;//发送缓冲,使用全局内存
 		uint8_t _rbuf[1024 * 18];
 	public:
 		tcp_c() : _status(st_invalid)
@@ -91,7 +95,7 @@ namespace ec
 			, _s5port(0)
 			, _btcpnodelay(false)
 			, _btcpkeepalive(true)
-			, _sndbufblks(EC_TCP_CLIENT_SNDBUF_BLKSIZE - EC_ALLOCTOR_ALIGN, EC_TCP_CLIENT_SNDBUF_HEAPSIZE / EC_TCP_CLIENT_SNDBUF_BLKSIZE)
+			, _sndbufblks(EC_TCP_CLIENT_SNDBUF_BLKSIZE, EC_TCP_CLIENT_SNDBUF_HEAPSIZE / EC_TCP_CLIENT_SNDBUF_BLKSIZE)
 			, _sndbuf(EC_TCP_CLIENT_SNDBUF_MAXSIZE, &_sndbufblks)
 		{
 			_timeconnect = ::time(nullptr);
@@ -274,7 +278,7 @@ namespace ec
 			return 0;
 		}
 
-		static void getPollString(int evt, std::string& sout)
+		static void getPollString(int evt, ec::string& sout)
 		{
 			struct t_i {
 				int evt;

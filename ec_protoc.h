@@ -2,7 +2,8 @@
 \file ec_protoc.h
 \author	jiangyong
 \email  kipway@outlook.com
-\update 2022.9.23
+\update 
+  2024.12.30 add CASE_BYTES
 
 classes to encode/decode google protocol buffer,support proto3
 
@@ -657,6 +658,7 @@ namespace ec
 #define CASE_I64(id,var) case id: var = static_cast<int64_t>(val);break;
 #define CASE_U64(id,var) case id: var = static_cast<uint64_t>(val);break;
 #define CASE_STR(id,var) case id: var.assign((const char*)pdata, size);break;
+#define CASE_BYTES(id,var) case id: var.assign((const uint8_t*)pdata, size);break;
 #define CASE_S32(id,var) case id: var = static_cast<int32_t>(ec::pb::zigzag<int32_t>().decode((uint32_t)val));break;
 #define CASE_S64(id,var) case id: var = static_cast<int64_t>(ec::pb::zigzag<int64_t>().decode(val));break;
 #define CASE_FIXF32(id,var) case id: var = *((const float*)pval);break;

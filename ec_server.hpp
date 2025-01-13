@@ -100,6 +100,9 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #include <thread>
 #include <cstdint>
 #include <vector>
+#ifdef _WIN32
+#include "ec_usews32.h"
+#endif
 #include "ec_vector.hpp"
 #include "ec_string.hpp"
 
@@ -233,7 +236,7 @@ namespace ec {
 		char _serviceName[128];
 		ec::vector<ec::string> _service_argv; //服务的命令行参数
 		HANDLE _hMapFile; ///! 共享内存用于存储PID,子进程创建,子进程退出时关闭。
-		HANDLE _hMutex; ///!windows使用命名互拆对象来判断一个驱动实例是否运行。
+		HANDLE _hMutex; ///!windows使用命名互拆对象来同步共享内存的访问。
 #else
 		struct t_msg {
 			long mtype;
@@ -291,7 +294,7 @@ namespace ec {
 		}
 
 		/**
-		 * @brief 描述信息, windows首台服务使用
+		 * @brief 描述信息, windows后台服务使用
 		 * @return 
 		*/
 		virtual const char* description()
@@ -500,9 +503,9 @@ namespace ec {
 		{
 			strcpy(_serviceName, _instname.c_str());
 			int i;
-			_service_argv.push_back(std::string(argv[0]));
+			_service_argv.push_back(ec::string(argv[0]));
 			for (i = 2; i < argc; i++) {
-				_service_argv.push_back(std::string(argv[i]));
+				_service_argv.push_back(ec::string(argv[i]));
 			}
 			SERVICE_TABLE_ENTRY st[] = {
 				{ _serviceName, g_ServiceMain },
@@ -803,7 +806,7 @@ namespace ec {
 			getMutexName(smutex);
 			getMapFileName(smapfile);
 
-			_hMutex = OpenMutex(SYNCHRONIZE, 0, smutex.c_str());
+			_hMutex = OpenMutex(SYNCHRONIZE, FALSE, smutex.c_str());
 			if (!_hMutex) {
 				return -1;
 			}
@@ -987,7 +990,7 @@ namespace ec {
 		*/
 		int getProcessID()
 		{
-			int nfile = open(_pidpathfile.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+			int nfile = open(_pidpathfile.c_str(), O_RDWR | O_CREAT | O_CLOEXEC, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 			if (nfile < 0)
 				return -1;
 			struct flock fl;
@@ -1301,7 +1304,7 @@ namespace ec {
 			}
 			formatPath(_workapth);
 
-			if (!pidpath || !*pidpath) {
+			if (!pidpath) {
 				_pidpathfile = "/var/tmp/";
 			}
 			else {
@@ -1377,6 +1380,9 @@ namespace ec {
 			}
 			else if (npid < 0) {
 				printf("get ProcessID failed. please make sure you have administrator power.\n");
+#ifndef _WIN32
+				printf("_pidpathfile = %s .\n", _pidpathfile.c_str());
+#endif
 				return -1;
 			}
 			if (!strcmp(argv[1], "-run") || !strcmp(argv[1], "-service")) { //直接运行或者子进程运行

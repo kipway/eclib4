@@ -166,7 +166,13 @@ namespace ec
 			if (INVALID_SOCKET == _socket)
 				return -1;
 			net::setfd_cloexec(_socket);
-			int nval = 1024 * 1024;
+#if defined(_MEM_TINY)
+			int nval = 128 * 1024;
+#elif defined(_MEM_SML)
+			int nval = 256 * 1024;
+#else
+			int nval = 512 * 1024;
+#endif
 			setsockopt(_socket, SOL_SOCKET, SO_SNDBUF, (char*)&nval, (socklen_t)sizeof(nval));
 			return 0;
 		}

@@ -294,8 +294,8 @@ namespace ec
 			return true;
 		}
 
-		template<typename _STR, class ALLOCATOR_ = std::allocator<_STR>>
-		bool get_jstr_array(const char* key, std::vector<_STR, ALLOCATOR_>& vals)
+		template<typename _STR>
+		bool get_jstr_array(const char* key, ec::vector<_STR>& vals)
 		{
 			const ec::json::t_kv* pkv;
 			pkv = getkv(key);
@@ -321,8 +321,8 @@ namespace ec
 			return true;
 		}
 
-		template<typename _VAL, class ALLOCATOR_ = std::allocator<_VAL>>
-		bool get_jnumber_array(const char* key, std::vector<_VAL, ALLOCATOR_>& vals)
+		template<typename _VAL>
+		bool get_jnumber_array(const char* key, ec::vector<_VAL>& vals)
 		{
 			const ec::json::t_kv* pkv;
 			pkv = getkv(key);
@@ -367,8 +367,8 @@ namespace ec
 			return val.fromjson(jvs);
 		}
 
-		template<typename _CLS, class ALLOCATOR_ = std::allocator<_CLS>>
-		bool get_jobj_array(const char* key, std::vector<_CLS, ALLOCATOR_>& vals)
+		template<typename _CLS>
+		bool get_jobj_array(const char* key, ec::vector<_CLS>& vals)
 		{
 			const ec::json::t_kv* pkv;
 			pkv = getkv(key);

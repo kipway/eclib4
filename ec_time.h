@@ -3,8 +3,9 @@
 \author	jiangyong
 \email	kipway@outlook.com
 \update
- 2024.2.1  clear include
- 2023.2.22 Fix string2jstime(), update cDateTime
+  2024-12-30 增加高精度单调毫秒和微秒tick计数
+  2024-2-1  clear include
+  2023-2-22 Fix string2jstime(), update cDateTime
 
 cTime
 	wrapper class for time
@@ -107,20 +108,24 @@ namespace ec
 #endif
 	}
 
-	inline uint32_t ustick()
+	/**
+	 * @brief 单调递增微秒(1/1000000秒)计数,用于相对计时
+	 * @return windows返回自第一次调用该函数起到现在的微秒数，Linux返回从系统启动开始到现在的微秒数。
+	 */
+	inline int64_t ustick()
 	{
 #ifdef _WIN32
-		FILETIME ft;
-		GetSystemTimeAsFileTime(&ft);
-		ULARGE_INTEGER ul;
-		ul.LowPart = ft.dwLowDateTime;
-		ul.HighPart = ft.dwHighDateTime;
-		return (uint32_t)((ul.QuadPart % 10000000LL) / 10);
+		static LARGE_INTEGER frequency, initv;
+		static bool binitres = QueryPerformanceFrequency(&frequency);
+		static bool binitv = QueryPerformanceCounter(&initv);
 
+		LARGE_INTEGER curv;
+		QueryPerformanceCounter(&curv);
+		return ((curv.QuadPart - initv.QuadPart) * 1000000) / frequency.QuadPart;
 #else
-		struct timeval tv;
-		gettimeofday(&tv, nullptr);
-		return (uint32_t)tv.tv_usec;
+		struct timespec tv;
+		clock_gettime(CLOCK_MONOTONIC, &tv);// ubuntu 4ms精度
+		return (int64_t)(tv.tv_sec * 1000000LL + tv.tv_nsec / 1000);
 #endif
 	}
 
@@ -137,6 +142,80 @@ namespace ec
 		struct timeval tv;
 		gettimeofday(&tv, nullptr);
 		return (int64_t)(tv.tv_sec * 1000LL + tv.tv_usec / 1000);
+#endif
+	}
+
+	inline int64_t mstime_mono_res()//mstime_mono时标分辨率,返回单位ns
+	{
+#ifdef _WIN32
+		static LARGE_INTEGER frequency;
+		static bool binitres = QueryPerformanceFrequency(&frequency);
+		static int64_t  clockres = 1000000000 / frequency.QuadPart;
+		return clockres;// dell intel i5-11500  100ns
+#else
+		static struct  timespec res;
+		static int nret = clock_getres(CLOCK_MONOTONIC_COARSE, &res);
+		if(0 == nret)
+			return (int64_t)res.tv_nsec; // ubuntu  4000000ns
+		return 4000000;
+#endif
+	}
+
+	/**
+	 * @brief  单调递增毫秒(1/1000秒)计数,用于相对计时
+	 * @return windows返回自第一次调用该函数起到现在的毫秒数，Linux返回从系统启动开始到现在的毫秒数。
+	 */
+	inline int64_t mstime_mono()
+	{
+#ifdef _WIN32
+		static LARGE_INTEGER frequency, initv;
+		static bool binitres = QueryPerformanceFrequency(&frequency);
+		static bool binitv = QueryPerformanceCounter(&initv);
+
+		LARGE_INTEGER curv;
+		QueryPerformanceCounter(&curv);
+		return ((curv.QuadPart - initv.QuadPart) * 1000LL) / frequency.QuadPart;
+#else
+		struct timespec tv;
+		clock_gettime(CLOCK_MONOTONIC_COARSE, &tv);// ubuntu 4ms精度
+		return (int64_t)(tv.tv_sec * 1000LL + tv.tv_nsec / 1000000);
+#endif
+	}
+
+	inline int64_t ustime_mono_res()//ustime_mono时标分辨率,返回单位ns
+	{
+#ifdef _WIN32
+		static LARGE_INTEGER frequency;
+		static bool binitres = QueryPerformanceFrequency(&frequency);
+		static int64_t  clockres = 1000000000 / frequency.QuadPart;
+		return clockres;// dell intel i5-11500  100ns
+#else
+		static struct  timespec res;
+		static int nret = clock_getres(CLOCK_MONOTONIC, &res);
+		if (0 == nret)
+			return (int64_t)res.tv_nsec; // ubuntu 1ns
+		return 4000000;
+#endif
+	}
+
+	/**
+	 * @brief 单调递增微秒(1/1000000秒)计数,用于相对计时
+	 * @return windows返回自第一次调用该函数起到现在的微秒数，Linux返回从系统启动开始到现在的微秒数。
+	 */
+	inline int64_t ustime_mono()
+	{
+#ifdef _WIN32
+		static LARGE_INTEGER frequency, initv;
+		static bool binitres = QueryPerformanceFrequency(&frequency);
+		static bool binitv = QueryPerformanceCounter(&initv);
+
+		LARGE_INTEGER curv;
+		QueryPerformanceCounter(&curv);
+		return ((curv.QuadPart - initv.QuadPart) * 1000000) / frequency.QuadPart;
+#else
+		struct timespec tv;
+		clock_gettime(CLOCK_MONOTONIC, &tv);// ubuntu 4ms精度
+		return (int64_t)(tv.tv_sec * 1000000LL + tv.tv_nsec / 1000);
 #endif
 	}
 

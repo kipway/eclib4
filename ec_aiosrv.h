@@ -554,8 +554,10 @@ namespace ec {
 					int ndo = pss->msglevel(); //处理ndo个消息,剩下得在doRecvBuffer中处理。
 					do {
 						--ndo;
-						if (domessage(pss->_fd, msg, msgtype) < 0)
+						if (domessage(pss->_fd, msg, msgtype) < 0) {
+							_plog->add(CLOG_DEFAULT_WRN, "fd(%d) domessage message failed.", pss->_fd);
 							return -1;
+						}
 						msg.clear();
 						if(ndo > 0)
 							msgtype = pss->onrecvbytes(nullptr, 0, _plog, &msg);

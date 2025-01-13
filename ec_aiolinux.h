@@ -6,15 +6,16 @@
 \author jiangyong
 
 \update
+  2024-12-30 优化UDP接收缓冲设置
   2024-4-3  更新close_
- 2023-6-6  增加可持续fd
- 2023-2-1  增加TCP ipv6支持
- 2022-11-9 适配ec_aiosrv.h
- 2022-2-12 删除sctp,fd改为增长至增加INT32_MAX然后回到1
- 2021-11-7 增加sctp支持和 TCP setkeepalive函数
- 2021-6-20 修正缓冲大小单位错误. 
- 2021-6-19 init中增加发送和接收缓冲参数设置.
- 2021-6-17 增加 int getfdtype(int fd)
+  2023-6-6  增加可持续fd
+  2023-2-1  增加TCP ipv6支持
+  2022-11-9 适配ec_aiosrv.h
+  2022-2-12 删除sctp,fd改为增长至增加INT32_MAX然后回到1
+  2021-11-7 增加sctp支持和 TCP setkeepalive函数
+  2021-6-20 修正缓冲大小单位错误.
+  2021-6-19 init中增加发送和接收缓冲参数设置.
+  2021-6-17 增加 int getfdtype(int fd)
 
 eclib 4.0 Copyright (c) 2017-2024, kipway
 source repository : https://github.com/kipway
@@ -419,8 +420,14 @@ public:
 				return -1;
 			}
 		}
-		int sndbufsize = 512 * 1024;
-		setsockopt(sysfd, SOL_SOCKET, SO_RCVBUF, (char*)&sndbufsize, (socklen_t)sizeof(sndbufsize));
+#if defined(_MEM_TINY)
+		int nbufsize = 256 * 1024;
+#elif defined(_MEM_SML)
+		int nbufsize = 512 * 1024;
+#else
+		int nbufsize = 1024 * 1024;
+#endif
+		setsockopt(sysfd, SOL_SOCKET, SO_RCVBUFFORCE, (char*)&nbufsize, (socklen_t)sizeof(nbufsize));
 
 		if (addr && addrlen) {
 			opt = 1; // reuse

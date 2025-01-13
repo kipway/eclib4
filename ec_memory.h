@@ -40,7 +40,6 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #include "ec_mutex.h"
 
 #ifndef _HAS_EC_ALLOCTOR
-#define EC_ALLOCTOR_ALIGN 8u
 #define _USE_EC_OBJ_ALLOCATOR  
 #endif
 

@@ -176,7 +176,8 @@ namespace ec
 				if (len > sizeof(_addr))
 					return -1;
 				_addrlen = (int)len;
-				memcpy(&_addr, paddr, len);
+				if(len)
+					memcpy(&_addr, paddr, len);
 				return 0;
 			}
 

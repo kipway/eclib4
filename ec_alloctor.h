@@ -101,6 +101,7 @@ namespace ec {
 }
 #else
 #include <sys/mman.h>
+#include <sys/resource.h>
 #include <malloc.h>
 namespace ec {
 	struct glibc_noarena {
@@ -802,13 +803,13 @@ class ec_allocator_ {
 public:
 	ec_allocator_(): _alloctor_self(SELFOBJ_AREA_SIZE, ec::zselfblksize) {
 #if defined(_MEM_TINY) || defined(_MEM_SML)
-		size_t sheaps[8]{ 16, 32, 64, 128, 256, 512, 1024, 2 * 1024 };
-		size_t mheaps[3]{ 4 * 1024, 8 * 1024, 16 * 1024};
+		size_t sheaps[7]{ 16, 32, 64, 128, 256, 512, 1024 };
+		size_t mheaps[5]{ 2 * 1024, 4 * 1024, 8 * 1024, 16 * 1024, 24 * 1024};
 		size_t lheaps[3]{ 32 * 1024, 64 * 1024, 128 * 1024 };
 		size_t hheaps[3]{ 256 * 1024, 512 * 1024, 1024 * 1024 };
 #else
 		size_t sheaps[12]{ 16, 32, 64, 96, 128, 256, 384, 512, 640, 800, 1024, 1424 };
-		size_t mheaps[11]{ 2 * 1024, 3 * 1024, 5 * 1024, 8 * 1024, 12 * 1024, 16 * 1024, 20 * 1024, 24 * 1024, 32 * 1024, 48 * 1024, 64 * 1024, };
+		size_t mheaps[11]{ 2 * 1024, 3 * 1024, 5 * 1024, 8 * 1024, 12 * 1024, 16 * 1024, 20 * 1024, 24 * 1024, 32 * 1024, 48 * 1024, 64 * 1024 };
 		size_t lheaps[4]{ 128 * 1024, 256 * 1024, 400 * 1024, 640 * 1024};
 		size_t hheaps[4]{ 1024 * 1024, 2 * 1024 * 1024 , 4 * 1024 * 1024,  8 * 1024 * 1024 };
 #endif
