@@ -5,6 +5,7 @@ Asynchronous http/ws session
 
 \author  jiangyong
 \update
+  2025-1-15 fix ec::aio::basews::ParseOneFrame
   2024-5-8 添加发送websocket协议断开握手控制帧。
   2023-12-13 增加会话连接消息处理均衡
   2023-8-10 update DoUpgradeWebSocket() logout infomation
@@ -176,7 +177,7 @@ namespace ec {
 				if (payloadlen == 126) {
 					datapos += 2;
 					if (usize < datapos)
-						return he_waitdata;
+						return 0;
 
 					datalen = pu[2];
 					datalen <<= 8;
@@ -185,7 +186,7 @@ namespace ec {
 				else if (payloadlen == 127) {
 					datapos += 8;
 					if (usize < datapos)
-						return he_waitdata;
+						return 0;
 
 					for (i = 0; i < 8; i++) {
 						if (i > 0)
@@ -196,7 +197,7 @@ namespace ec {
 				else {
 					datalen = payloadlen;
 					if (usize < datapos)
-						return he_waitdata;
+						return 0;
 				}
 				if (datalen > MAXSIZE_WS_READ_FRAME || _wsmsg.size() + datalen > MAXSIZE_WS_READ_PKG)//outof size limit
 					return -1;
