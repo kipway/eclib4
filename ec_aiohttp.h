@@ -5,7 +5,11 @@ Asynchronous http/ws session
 
 \author  jiangyong
 \update
+<<<<<<< HEAD
   2025-1-15 fix ec::aio::basews::ParseOneFrame
+=======
+  2025-1-18 Fix ParseOneFrame()
+>>>>>>> 0de16159bf51b9cf8fe988fafc2127fd9c81ba4f
   2024-5-8 添加发送websocket协议断开握手控制帧。
   2023-12-13 增加会话连接消息处理均衡
   2023-8-10 update DoUpgradeWebSocket() logout infomation
