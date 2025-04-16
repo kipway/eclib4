@@ -19,10 +19,8 @@ namespace ec {
 		class session_tls : public session
 		{
 		public:
-			session_tls(uint32_t ucid, session&& ss, const void* pcer, size_t cerlen,
-				const void* pcerroot, size_t cerrootlen,
-				std::mutex* pRsaLck, RSA* pRsaPrivate, ilog* plog) : session(std::move(ss))
-				, _tls(ucid, pcer, cerlen, pcerroot, cerrootlen, pRsaLck, pRsaPrivate, plog)
+			session_tls(uint32_t ucid, session&& ss, ec::tls_srvca* pca, ilog* plog) : session(std::move(ss))
+				, _tls(ucid, pca, plog)
 			{
 				_protocol = EC_AIO_PROC_TLS;
 				_tls.appendreadbytes(_rbuf.data_(), _rbuf.size_());

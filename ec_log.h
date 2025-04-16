@@ -35,6 +35,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #include "ec_netio.h"
 #include "ec_time.h"
 #include "ec_string.h"
+#include "ec_string.hpp"
 
 #define EC_LOG_FRM_SIZE (1024 * 30) // MAX size of one log string
 namespace ec

@@ -3,6 +3,8 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
+  2025.3.24 再次优化小内存
+  2025.3.7  小内存使用优化
   2024.12.02 update memory block initialization
   2024.11.29 remove clib malloc
   2024.11.07 add define _HAS_EC_ALLOCTOR
@@ -10,7 +12,7 @@
 memory
 	eclib memory allocator for ec::string, ec::hashmap, and other small objects etc.
 
-eclib 4.0 Copyright (c) 2017-2024, kipway
+eclib 4.0 Copyright (c) 2017-2025, kipway
 source repository : https://github.com/kipway
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,6 +77,13 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #endif
 
 #define EC_ALLOCTOR_LARGEMEM_HEADSIZE (2 * EC_ALLOCTOR_ALIGN) // head size of large memory
+
+#ifndef EC_ALLOCTOR_FIRSTHEAP_SIZE
+#define EC_ALLOCTOR_FIRSTHEAP_SIZE (1024 * 32)
+#endif
+#ifndef EC_ALLOCTOR_FIRSTHEAP_BLKS
+#define EC_ALLOCTOR_FIRSTHEAP_BLKS 16
+#endif
 
 #ifdef _WIN32
 #include <memoryapi.h>
@@ -294,7 +303,7 @@ namespace ec {
 			printf("  numheaps = %d, numfreeblks = %zu\n", nheaps, _numfreeblks);
 			return 0;
 		}
-		template<class STR_ = std::string>
+		template<class STR_>
 		void meminfo(STR_& sout) { // for debug
 			safe_lock<LOCK> lck(&_lck);
 			int nheaps = 0, nl;
@@ -312,6 +321,28 @@ namespace ec {
 				pheap = pheap->_pnext;
 			}
 			nl = snprintf(stmp, sizeof(stmp), "\n  numheaps = %d, numfreeblks = %zu \n", nheaps, _numfreeblks);
+			sout.append(stmp, nl);
+		}
+		template<class STR_>
+		void memjs(STR_& sout) { // for debug
+			safe_lock<LOCK> lck(&_lck);
+			int nheaps = 0, nl;
+			objsets_* pheap = _phead;
+			char stmp[400];
+			sout.append("{\"heap_objects\":[");
+			while (pheap) {
+				if (nheaps)
+					sout.push_back(',');
+				nl = snprintf(stmp, sizeof(stmp), "{\"numobjs\":%zu,\"freeobjs\":%zu,\"sizearea\":%zu,\"sizeobj\":%zu}",
+					pheap->_numobjs, pheap->_numfree, pheap->_sizearea, pheap->_sizeobj);
+				if (nl < (int)sizeof(stmp)) {
+					sout.append(stmp, nl);
+				}
+				pheap = pheap->_pnext;
+				++nheaps;
+			}
+			sout.push_back(']');
+			nl = snprintf(stmp, sizeof(stmp), ",\"numheaps\":%d,\"numfreeblks:\":%zu}", nheaps, _numfreeblks);
 			sout.append(stmp, nl);
 		}
 	};
@@ -429,6 +460,20 @@ namespace ec{
 		uint32_t _sizeblk; // 内存块的大小，构造或者初始化时设定,EC_ALLOCTOR_ALIGN字节对齐.
 		uint32_t _numblksperheap; //每个堆里的内存块个数
 		LOCK _lck;
+
+		/**
+		 * @brief 计算初始化分配的内存，优化小使用量，第一次分配最大16块或者32KB，之后按照正常预设的额配。
+		 * @param sizeblk 每块大小
+		 * @param numblk 块数
+		 * @return 块数 
+		 */
+		size_t numInitBlks(size_t sizeblk, size_t numblk)
+		{
+			if (numblk <= EC_ALLOCTOR_FIRSTHEAP_BLKS || sizeblk * numblk <= EC_ALLOCTOR_FIRSTHEAP_SIZE)
+				return numblk;
+			return EC_ALLOCTOR_FIRSTHEAP_SIZE / sizeblk < EC_ALLOCTOR_FIRSTHEAP_BLKS ?
+				EC_ALLOCTOR_FIRSTHEAP_BLKS : EC_ALLOCTOR_FIRSTHEAP_SIZE / sizeblk;
+		}
 	public:
 		inline int32_t numheaps() const	{
 			return _numheaps;
@@ -459,7 +504,7 @@ namespace ec{
 			_numfreeblks(0),
 			_sizeblk(0),
 			_numblksperheap(0) {
-			init(sizeblk, numblk);
+			init(sizeblk, numblk, true, false);
 		}
 		~blk_alloctor() {
 			memheap_* p = _phead, * pn;
@@ -474,7 +519,7 @@ namespace ec{
 			_sizeblk = 0;
 			_numblksperheap = 0;
 		}
-		bool init(size_t sizeblk, size_t numblk, bool balloc = true) {
+		bool init(size_t sizeblk, size_t numblk, bool balloc, bool bfirstsml) {
 			if (_phead) {
 				return true;
 			}
@@ -489,7 +534,8 @@ namespace ec{
 			if (!_phead) {
 				return false;
 			}
-			if (!_phead->init(sizeblk, numblk)) {
+			size_t initnumblks = bfirstsml ? numInitBlks(sizeblk, numblk) : numblk;
+			if (!_phead->init(sizeblk, initnumblks)) {
 				delete _phead;
 				_phead = nullptr;
 				return false;
@@ -497,7 +543,7 @@ namespace ec{
 			_sizeblk = (uint32_t)_phead->sizeblk();
 			_numblksperheap = (uint32_t)numblk;
 			_numheaps = 1;
-			_numfreeblks += (int)_numblksperheap;
+			_numfreeblks += (int)initnumblks;
 			return true;
 		}
 		void* malloc_(size_t* poutsize) {
@@ -507,18 +553,27 @@ namespace ec{
 				pheap = new memheap_(this);
 				if (!pheap)
 					return nullptr;
-				if (!pheap->init(_sizeblk, _numblksperheap)) {
+				size_t initnumblks = _numblksperheap;
+				if (!_phead) {
+					initnumblks = numInitBlks(_sizeblk, _numblksperheap);
+				}
+				if (!pheap->init(_sizeblk, initnumblks)) {
 					delete pheap;
 					return nullptr;
 				}
-				pheap->_pnext = _phead;
-				_phead = pheap;
+				if (!_phead) {
+					_phead = pheap;
+				}
+				else { //2025-3-18改为_phead不变
+					pheap->_pnext = _phead->_pnext;
+					_phead->_pnext = pheap;
+				}
 				_numheaps++;
-				_numfreeblks += (int32_t)(_numblksperheap - 1);
+				_numfreeblks += (int32_t)(initnumblks - 1);
 				if (poutsize) {
 					*poutsize = _sizeblk;
 				}
-				return _phead->malloc_();
+				return pheap->malloc_();
 			}
 			void* pret = nullptr;
 			memheap_* pprior = nullptr;
@@ -529,10 +584,10 @@ namespace ec{
 					if (poutsize) {
 						*poutsize = _sizeblk;
 					}
-					if (pprior && pheap->numfree() > 0) { // move to head for next fast malloc
+					if (pprior && pprior != _phead && pheap->numfree() > 0) { // move to head->next for next fast malloc
 						pprior->_pnext = pheap->_pnext;
-						pheap->_pnext = _phead;
-						_phead = pheap;
+						pheap->_pnext = _phead->_pnext;
+						_phead->_pnext = pheap;
 					}
 					return pret;
 				}
@@ -611,33 +666,8 @@ namespace ec{
 		std::atomic_int _nLargeMems{ 0 };// Number of remaining large memory blocks, used for memory leak detection
 		PA_ _alloctors[EC_SIZE_BLK_ALLOCATOR];
 	private:
-		void* malloc__(size_t size, size_t* psize = nullptr) { // size <= maxblksize()
-			void* pret = nullptr;
-			uint32_t i = 0u;
-			if (_size > 16 && size > 1000) { // 1/2 find
-				int nl = 0, nh = (int)_size - 1, nm = 0;
-				while (nl <= nh) {
-					nm = (nl + nh) / 2;
-					if (_alloctors[nm]->sizeblk() < size)
-						nl = nm + 1;
-					else if (_alloctors[nm]->sizeblk() > size)
-						nh = nm - 1;
-					else
-						break;
-				}
-				i = nm;
-			}
-			for (; i < _size; i++) {
-				if (_alloctors[i]->sizeblk() >= size) {
-					pret = _alloctors[i]->malloc_(psize);
-					return pret;
-				}
-			}
-			return pret;
-		}
-
 		void* largeMalloc(size_t size, size_t* psize = nullptr) {
-			size += (EC_ALLOCTOR_ALIGN * 2);
+			size += EC_ALLOCTOR_LARGEMEM_HEADSIZE;
 			size_t zlen = 0;
 			char* ptr = (char*)blk_sysmalloc(size, &zlen);
 			if (ptr) {
@@ -663,7 +693,7 @@ namespace ec{
 			if (_size == sizeof(_alloctors) / sizeof(PA_))
 				return false;
 			PA_ p = new blk_alloctor<spinlock>;
-			if (!p->init(sizeblk, numblk, balloc)) {
+			if (!p->init(sizeblk, numblk, balloc, true)) {
 				delete p;
 				return false;
 			}
@@ -685,11 +715,20 @@ namespace ec{
 		size_t maxblksize() const {
 			return 0u == _size ? 0 : _alloctors[_size - 1]->sizeblk();
 		}
-		void* malloc_(size_t size, size_t* psize = nullptr)	{
-			if (size > maxblksize()) {
-				return largeMalloc(size, psize);
+		void* malloc_(size_t size, size_t* psize = nullptr) {
+			int nl = 0, nh = static_cast<int>(_size), nm;
+			while (nl < nh) {
+				nm = nl + (nh - nl) / 2;
+				if (_alloctors[nm]->sizeblk() < size) {
+					nl = nm + 1;
+				}
+				else {
+					nh = nm;
+				}
 			}
-			return malloc__(size, psize);
+			if (nl < (int)_size)
+				return _alloctors[nl]->malloc_(psize);
+			return largeMalloc(size, psize);
 		}
 		void* realloc_(void* ptr, size_t size, size_t* poutsize = nullptr) {
 			if (!ptr) { // malloc
@@ -740,7 +779,7 @@ namespace ec{
 			printf("}\n\n");
 			return 0;
 		}
-		template<class STR_ = std::string>
+		template<class STR_>
 		void meminfo(STR_& sout, int ndebug = 0) { // for debug
 			char stmp[400];
 			sout.append("\n");
@@ -762,6 +801,22 @@ namespace ec{
 				}
 			}
 			sout.append("\n");
+		}
+		template<class STR_>
+		void memjs(STR_& sout) { // for debug
+			char stmp[400];
+			int nl = snprintf(stmp, sizeof(stmp), "{\"numLargeMemorys\":%d}", static_cast<int>(_nLargeMems));
+			sout.append(stmp, nl);
+			for (auto i = 0u; i < _size; i++) {
+				nl = snprintf(stmp, sizeof(stmp), ",{\"blockSize\":%zu,\"blockPerHeap\":%u,\"numHeaps\":%d,\"FreeBlocks\":%d}",
+					_alloctors[i]->sizeblk()
+					, _alloctors[i]->numBlksPerHeap()
+					, _alloctors[i]->numheaps()
+					, _alloctors[i]->numfreeblks()
+				);
+				if (nl < (int)sizeof(stmp))
+					sout.append(stmp, nl);
+			}
 		}
 	};
 	constexpr size_t zbaseobjsize = sizeof(memheap_) > sizeof(blk_alloctor<spinlock>) ? sizeof(memheap_) : sizeof(blk_alloctor<spinlock>);

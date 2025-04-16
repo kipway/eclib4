@@ -27,6 +27,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #include <ws2tcpip.h>
 #include <mswsock.h>
 
+#include "ec_string.hpp"
 #include "ec_diskio.h"
 #include "ec_log.h"
 #include "ec_map.h"
@@ -155,7 +156,7 @@ namespace ec {
 			HANDLE _hiocp;
 			ec::hashmap<int, t_fd, keq_fd> _mapfd;
 			int _nextfd; // from 1-INT32_MAX
-			std::string _sfdfile;
+			ec::string _sfdfile;
 
 			int nextfd()
 			{

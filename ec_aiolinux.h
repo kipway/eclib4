@@ -32,6 +32,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #include <sys/epoll.h>
 
 #include <string>
+#include "ec_string.hpp"
 #include "ec_map.h"
 #include "ec_netio.h"
 #include "ec_jsonx.h"
@@ -72,7 +73,7 @@ private:
 	int _nextfd;
 	int _sizercvbuf, _sizesndbuf; // kbytes
 	ec::hashmap<int, t_fd, keq_fd> _mapfd;
-	std::string _sfdfile;
+	ec::string _sfdfile;
 
 	int nextfd()
 	{

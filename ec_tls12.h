@@ -90,6 +90,29 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #endif
 namespace ec
 {
+	namespace tls {
+		enum rec_contenttype {
+			rec_change_cipher_spec = 20,
+			rec_alert = 21,
+			rec_handshake = 22,
+			rec_application_data = 23,
+			rec_max = 255
+		};
+		enum handshaketype {
+			hsk_hello_request = 0,
+			hsk_client_hello = 1,
+			hsk_server_hello = 2,
+			hsk_certificate = 11,
+			hsk_server_key_exchange = 12,
+			hsk_certificate_request = 13,
+			hsk_server_hello_done = 14,
+			hsk_certificate_verify = 15,
+			hsk_client_key_exchange = 16,
+			hsk_finished = 20,
+			hsk_max = 255
+		};
+	}
+
 	template<class _strOut>
 	bool load_certfile(const char* filecert, _strOut& out)
 	{
@@ -155,28 +178,237 @@ namespace ec
 		return true;
 	}
 
-	namespace tls {
-		enum rec_contenttype {
-			rec_change_cipher_spec = 20,
-			rec_alert = 21,
-			rec_handshake = 22,
-			rec_application_data = 23,
-			rec_max = 255
-		};
-		enum handshaketype {
-			hsk_hello_request = 0,
-			hsk_client_hello = 1,
-			hsk_server_hello = 2,
-			hsk_certificate = 11,
-			hsk_server_key_exchange = 12,
-			hsk_certificate_request = 13,
-			hsk_server_hello_done = 14,
-			hsk_certificate_verify = 15,
-			hsk_client_key_exchange = 16,
-			hsk_finished = 20,
-			hsk_max = 255
-		};
+	class tls_srvca
+	{
+	private:
+		RSA* _pRsaPub;
+		RSA* _pRsaPrivate;
 
+		ec::string _pcer;
+		ec::string _prootcer;
+
+		std::mutex _csRsa;
+	public:
+		tls_srvca() : _pRsaPub(nullptr), _pRsaPrivate(nullptr)
+		{
+			_pcer.reserve(4096);
+			_prootcer.reserve(8192);
+		}
+		inline bool isok() {
+			return _pRsaPub && _pRsaPrivate;
+		}
+		void clear() {
+			if (_pRsaPrivate)
+				RSA_free(_pRsaPrivate);
+			if (_pRsaPub)
+				RSA_free(_pRsaPub);
+			_pRsaPub = nullptr;
+			_pRsaPrivate = nullptr;
+		}
+		~tls_srvca()
+		{
+			clear();
+		}
+		bool InitCert(const char* filecert, const char* filerootcert, const char* fileprivatekey)
+		{
+			std::unique_lock<std::mutex> lck(_csRsa);
+			clear();
+			if (!load_certfile(filecert, _pcer))
+				return false;
+			if (filerootcert && *filerootcert) {
+				if (!load_certfile(filerootcert, _prootcer))
+					return false;
+				if (strstr(_prootcer.c_str(), "-----BEGIN CERTIFICATE-----")) {
+					BIO* bioPub = BIO_new_mem_buf(_prootcer.data(), (int)_prootcer.size());
+					X509* px509 = PEM_read_bio_X509(bioPub, nullptr, nullptr, nullptr);
+					BIO_free(bioPub);
+					if (!px509)
+						return false;
+					if (!x509toDer(px509, _prootcer)) {
+						X509_free(px509);
+						return false;;
+					}
+					X509_free(px509);
+				}
+			}
+
+			FILE* pf = fopen(fileprivatekey, "rb");
+			if (!pf)
+				return false;
+			_pRsaPrivate = PEM_read_RSAPrivateKey(pf, nullptr, nullptr, nullptr);
+			fclose(pf);
+			if (!_pRsaPrivate) {
+				return false;
+			}
+			bool bresult = false;
+			EVP_PKEY* pevppk = nullptr;
+			X509* px509 = nullptr;
+			do {
+				if (strstr(_pcer.c_str(), "-----BEGIN CERTIFICATE-----")) {
+					BIO* bioPub = BIO_new_mem_buf(_pcer.data(), (int)_pcer.size());
+					px509 = PEM_read_bio_X509(bioPub, nullptr, nullptr, nullptr);
+					BIO_free(bioPub);
+					if (!px509)
+						break;
+					if (!x509toDer(px509, _pcer))
+						break;
+				}
+				else { // der
+					const unsigned char* p = (const unsigned char*)_pcer.data();
+					px509 = d2i_X509(nullptr, &p, (long)_pcer.size());
+					if (!px509)
+						break;;
+				}
+				pevppk = X509_get_pubkey(px509);
+				if (!pevppk)
+					break;
+				_pRsaPub = EVP_PKEY_get1_RSA(pevppk); //get copy of RSA public key
+				if (!_pRsaPub)
+					break;
+				bresult = true;
+			} while (0);
+
+			if (pevppk)
+				EVP_PKEY_free(pevppk);
+			if (px509)
+				X509_free(px509);
+			if (!bresult)
+				clear();
+			return bresult;
+		}
+		/**
+		 * @brief 重新设置证书
+		 * @param filecert 证书
+		 * @param filerootcert 根证书
+		 * @param fileprivatekey 私钥
+		 * @return -1:读取新证书错误; 0:没有改变； 1：成功替换
+		 */
+		int ReSetCert(const char* filecert, const char* filerootcert, const char* fileprivatekey)
+		{
+			tls_srvca tmp;
+			if (!tmp.InitCert(filecert, filerootcert, fileprivatekey))
+				return -1;
+			if (isSameCert(tmp._pcer) && isSameRootCert(tmp._prootcer))
+				return 0;
+			moveFrom(tmp);
+			return 1;
+		}
+
+		/**
+		 * @brief 私钥解密
+		 * @param flen 长度
+		 * @param psrc 密文
+		 * @param poubuf 输出明文
+		 * @return 解密后的字节数
+		 */
+		int PrivateDecrypt(int flen, const unsigned char* psrc, unsigned char* poubuf)
+		{
+			int nbytes;
+			_csRsa.lock();
+			nbytes = RSA_private_decrypt(flen, psrc, poubuf, _pRsaPrivate, RSA_PKCS1_PADDING);
+			_csRsa.unlock();
+			return nbytes;
+		}
+
+		bool isSameCert(ec::string& ca)
+		{
+			std::unique_lock<std::mutex> lck(_csRsa);
+			if (_pcer.size() != ca.size())
+				return false;
+			const char* s1 = _pcer.data();
+			const char* s2 = ca.data();
+			size_t i, z = _pcer.size();
+			for (i = 0; i < z; i++) {
+				if (*s1 != *s2)
+					return false;
+				++s1;
+				++s2;
+			}
+			return true;
+		}
+
+		bool isSameRootCert(ec::string& caroot)
+		{
+			std::unique_lock<std::mutex> lck(_csRsa);
+			if (_prootcer.size() != caroot.size())
+				return false;
+			const char* s1 = _prootcer.data();
+			const char* s2 = caroot.data();
+			size_t i, z = _prootcer.size();
+			for (i = 0; i < z; i++) {
+				if (*s1 != *s2)
+					return false;
+				++s1;
+				++s2;
+			}
+			return true;
+		}
+
+		void moveFrom(tls_srvca& ca) //移动，用于在线替换新证书
+		{
+			std::unique_lock<std::mutex> lck(_csRsa);
+			clear();
+			_pcer.swap(ca._pcer);
+			_prootcer.swap(ca._prootcer);
+			_pRsaPub = ca._pRsaPub;
+			_pRsaPrivate = ca._pRsaPrivate;
+			ca._pRsaPub = nullptr;
+			ca._pRsaPrivate = nullptr;
+		}
+
+		inline bool empty() const
+		{
+			return nullptr == _pRsaPub;
+		}
+
+		bool MakeCertificateMsg(ec::vstream& vo)
+		{
+			std::unique_lock<std::mutex> lck(_csRsa);
+			vo.clear();
+			vo.push_back((uint8_t)tls::hsk_certificate);
+			vo.push_back((uint8_t)0);
+			vo.push_back((uint8_t)0);
+			vo.push_back((uint8_t)0);//1,2,3
+			uint32_t u;
+			if (!_prootcer.empty()) {
+				u = (uint32_t)(_pcer.size() + _prootcer.size() + 6);
+				vo.push_back((uint8_t)((u >> 16) & 0xFF));
+				vo.push_back((uint8_t)((u >> 8) & 0xFF));
+				vo.push_back((uint8_t)(u & 0xFF));//4,5,6
+
+				u = (uint32_t)_pcer.size();
+				vo.push_back((uint8_t)((u >> 16) & 0xFF));
+				vo.push_back((uint8_t)((u >> 8) & 0xFF));
+				vo.push_back((uint8_t)(u & 0xFF));//7,8,9
+				vo.append((const uint8_t*)_pcer.data(), _pcer.size());
+
+				u = (uint32_t)_prootcer.size();
+				vo.push_back((uint8_t)((u >> 16) & 0xFF));
+				vo.push_back((uint8_t)((u >> 8) & 0xFF));
+				vo.push_back((uint8_t)(u & 0xFF));
+				vo.append((const uint8_t*)_prootcer.data(), _prootcer.size());
+			}
+			else {
+				u = (uint32_t)_pcer.size() + 3;
+				vo.push_back((uint8_t)((u >> 16) & 0xFF));
+				vo.push_back((uint8_t)((u >> 8) & 0xFF));
+				vo.push_back((uint8_t)(u & 0xFF));//4,5,6
+
+				u = (uint32_t)_pcer.size();
+				vo.push_back((uint8_t)((u >> 16) & 0xFF));
+				vo.push_back((uint8_t)((u >> 8) & 0xFF));
+				vo.push_back((uint8_t)(u & 0xFF));//7,8,9
+				vo.append((const uint8_t*)_pcer.data(), _pcer.size());
+			}
+			u = (uint32_t)vo.size() - 4;
+			*(vo.data() + 1) = (uint8_t)((u >> 16) & 0xFF);
+			*(vo.data() + 2) = (uint8_t)((u >> 8) & 0xFF);
+			*(vo.data() + 3) = (uint8_t)((u >> 0) & 0xFF);
+			return true;
+		}
+	};
+
+	namespace tls {
 		class handshake // Handshake messages
 		{
 		public:
@@ -1038,42 +1270,23 @@ namespace ec
 		class sessionserver : public session // session for server
 		{
 		public:
-			sessionserver(uint32_t ucid, const void* pcer, size_t cerlen,
-				const void* pcerroot, size_t cerrootlen, std::mutex *pRsaLck, RSA* pRsaPrivate, ilog* plog
+			sessionserver(uint32_t ucid, ec::tls_srvca* pca, ilog* plog
 			) : session(true, ucid, plog)
 			{
-				_pcer = pcer;
-				_cerlen = cerlen;
-				_pcerroot = pcerroot;
-				_cerrootlen = cerrootlen;
-				_pRsaLck = pRsaLck;
-				_pRsaPrivate = pRsaPrivate;
+				_pca = pca;
 				memset(_sip, 0, sizeof(_sip));
 			}
 
-			sessionserver(sessionserver*p) : session(p)
+			sessionserver(sessionserver* p) : session(p)
 			{
-				_pRsaLck = p->_pRsaLck;
-				_pRsaPrivate = p->_pRsaPrivate;
-
-				_pcer = p->_pcer;
-				_cerlen = p->_cerlen;
-				_pcerroot = p->_pcerroot;
-				_cerrootlen = p->_cerrootlen;
+				_pca = p->_pca;
 				memcpy(_sip, p->_sip, sizeof(_sip));
-
 				_pkgm.append(p->_pkgm.data_(), p->_pkgm.size_());
 			}
 
 			sessionserver(sessionserver&& v) : session(std::move(v)), _pkgm(std::move(v._pkgm))
 			{
-				_pRsaLck = v._pRsaLck;
-				_pRsaPrivate = v._pRsaPrivate;
-
-				_pcer = v._pcer;
-				_cerlen = v._cerlen;
-				_pcerroot = v._pcerroot;
-				_cerrootlen = v._cerrootlen;
+				_pca = v._pca;
 				memcpy(_sip, v._sip, sizeof(_sip));
 			}
 
@@ -1081,13 +1294,7 @@ namespace ec
 			{
 			}
 		protected:
-			std::mutex * _pRsaLck;
-			RSA* _pRsaPrivate;
-
-			const void* _pcer;
-			size_t _cerlen;
-			const void* _pcerroot;
-			size_t _cerrootlen;
+			ec::tls_srvca* _pca;
 			char _sip[32];
 		private:
 			parsebuffer _pkgm;// for handshake
@@ -1131,49 +1338,7 @@ namespace ec
 			{
 				if (!_hmsg)
 					return false;
-				_hmsg->_srv_certificate.clear();
-				_hmsg->_srv_certificate.push_back((uint8_t)tls::hsk_certificate);
-				_hmsg->_srv_certificate.push_back((uint8_t)0);
-				_hmsg->_srv_certificate.push_back((uint8_t)0);
-				_hmsg->_srv_certificate.push_back((uint8_t)0);//1,2,3
-
-				uint32_t u;
-				if (_pcerroot && _cerrootlen) {
-					u = (uint32_t)(_cerlen + _cerrootlen + 6);
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 16) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 8) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)(u & 0xFF));//4,5,6
-
-					u = (uint32_t)_cerlen;
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 16) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 8) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)(u & 0xFF));//7,8,9
-					_hmsg->_srv_certificate.append((const uint8_t*)_pcer, _cerlen);
-
-					u = (uint32_t)_cerrootlen;
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 16) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 8) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)(u & 0xFF));
-					_hmsg->_srv_certificate.append((const uint8_t*)_pcerroot, _cerrootlen);
-				}
-				else {
-					u = (uint32_t)_cerlen + 3;
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 16) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 8) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)(u & 0xFF));//4,5,6
-
-					u = (uint32_t)_cerlen;
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 16) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)((u >> 8) & 0xFF));
-					_hmsg->_srv_certificate.push_back((uint8_t)(u & 0xFF));//7,8,9
-					_hmsg->_srv_certificate.append((const uint8_t*)_pcer, _cerlen);
-				}
-
-				u = (uint32_t)_hmsg->_srv_certificate.size() - 4;
-				*(_hmsg->_srv_certificate.data() + 1) = (uint8_t)((u >> 16) & 0xFF);
-				*(_hmsg->_srv_certificate.data() + 2) = (uint8_t)((u >> 8) & 0xFF);
-				*(_hmsg->_srv_certificate.data() + 3) = (uint8_t)((u >> 0) & 0xFF);
-				return true;
+				return _pca->MakeCertificateMsg(_hmsg->_srv_certificate);
 			}
 
 			template <class _Out>
@@ -1268,14 +1433,10 @@ namespace ec
 				if (ulen % 16) { //规范本版本
 					uint32_t ul = pmsg[4];//private key decode
 					ul = (ul << 8) | pmsg[5];
-					_pRsaLck->lock();
-					nbytes = RSA_private_decrypt((int)ul, pmsg + 6, premasterkey, _pRsaPrivate, RSA_PKCS1_PADDING);
-					_pRsaLck->unlock();
+					nbytes = _pca->PrivateDecrypt((int)ul, pmsg + 6, premasterkey);
 				}
 				else { //兼容错误版本
-					_pRsaLck->lock();
-					nbytes = RSA_private_decrypt((int)ulen, pmsg + 4, premasterkey, _pRsaPrivate, RSA_PKCS1_PADDING);
-					_pRsaLck->unlock();
+					nbytes = _pca->PrivateDecrypt((int)ulen, pmsg + 4, premasterkey);
 				}
 
 				if (nbytes != 48) {
@@ -1442,101 +1603,5 @@ namespace ec
 			}
 		};
 
-		class srvca
-		{
-		public:
-			RSA* _pRsaPub;
-			RSA* _pRsaPrivate;
-
-			ec::string _pcer;
-			ec::string _prootcer;
-
-			std::mutex _csRsa;
-		public:
-			srvca() : _pRsaPub(nullptr), _pRsaPrivate(nullptr)
-			{
-			}
-			void clear() {
-				if (_pRsaPrivate)
-					RSA_free(_pRsaPrivate);
-				if (_pRsaPub)
-					RSA_free(_pRsaPub);
-				_pRsaPub = nullptr;
-				_pRsaPrivate = nullptr;
-			}
-			inline bool isok() {
-				return _pRsaPub && _pRsaPrivate;
-			}
-			~srvca()
-			{
-				clear();
-			}
-			bool InitCert(const char* filecert, const char* filerootcert, const char* fileprivatekey)
-			{
-				clear();
-				if (!load_certfile(filecert, _pcer))
-					return false;
-				if (filerootcert && *filerootcert) {
-					if (!load_certfile(filerootcert, _prootcer))
-						return false;
-					if (strstr(_prootcer.c_str(),"-----BEGIN CERTIFICATE-----")) { // pem
-						BIO* bioPub = BIO_new_mem_buf(_prootcer.data(), (int)_prootcer.size());
-						X509* px509 = PEM_read_bio_X509(bioPub, nullptr, nullptr, nullptr);
-						BIO_free(bioPub);
-						if (!px509)
-							return false;
-						if (!x509toDer(px509, _prootcer)) {
-							X509_free(px509);
-							return false;;
-						}
-						X509_free(px509);
-					}
-				}
-
-				FILE* pf = fopen(fileprivatekey, "rb");
-				if (!pf)
-					return false;
-				_pRsaPrivate = PEM_read_RSAPrivateKey(pf, nullptr, nullptr, nullptr);
-				fclose(pf);
-				if (!_pRsaPrivate) {
-					return false;
-				}
-				bool bresult = false;
-				EVP_PKEY* pevppk = nullptr;
-				X509* px509 = nullptr;
-				do {
-					if (strstr(_pcer.c_str(), "-----BEGIN CERTIFICATE-----")) { // pem
-						BIO* bioPub = BIO_new_mem_buf(_pcer.data(), (int)_pcer.size());
-						px509 = PEM_read_bio_X509(bioPub, nullptr, nullptr, nullptr);
-						BIO_free(bioPub);
-						if (!px509)
-							break;
-						if (!x509toDer(px509, _pcer))
-							break;
-					}
-					else { // der
-						const unsigned char* p = (const unsigned char*)_pcer.data();
-						px509 = d2i_X509(nullptr, &p, (long)_pcer.size());
-						if (!px509)
-							break;;
-					}
-					pevppk = X509_get_pubkey(px509);
-					if (!pevppk)
-						break;
-					_pRsaPub = EVP_PKEY_get1_RSA(pevppk); //get copy of RSA public key
-					if (!_pRsaPub)
-						break;
-					bresult = true;
-				} while (0);
-
-				if(pevppk)
-					EVP_PKEY_free(pevppk);
-				if(px509)
-					X509_free(px509);
-				if (!bresult)
-					clear();
-				return bresult;
-			}
-		};
 	}// tls
 }// ec

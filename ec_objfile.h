@@ -1,13 +1,13 @@
 ﻿/*!
 \brief ec_objfile.h
-object file
+object file 支持跨页存储，用于替代ec_rdf.h
 
 \author	jiangyong
 \email  kipway@outlook.com
 \update 
   2023-12-14 增加表空间大小获取
 
-eclib 4.0 Copyright (c) 2017-2024, kipway
+eclib 3.0 Copyright (c) 2017-2023, kipway
 source repository : https://github.com/kipway
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,7 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #include <stdint.h>
 #include <functional>
 #include <algorithm>
+#include "ec_string.hpp"
 #include "ec_diskio.h"
 #include "ec_file.h"
 #include "ec_log.h"
@@ -253,7 +254,7 @@ namespace ec {
 	protected:
 		int _lasterr;
 		ec::ilog* _plog;
-		std::string _sfile;
+		ec::string _sfile;
 		obf_param _args;
 		obf_info  _info;
 	public:

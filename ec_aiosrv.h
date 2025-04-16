@@ -61,7 +61,7 @@ namespace ec {
 			ec::blk_alloctor<> _sndbufblks; //共享发送缓冲分配区
 			ec::hashmap<int, psession, kep_session, del_session > _mapsession;//会话连接
 #if (0 != EC_AIOSRV_TLS)
-			tls::srvca _ca;  // certificate
+			ec::tls_srvca _ca;  // certificate
 #endif
 			int64_t _mstimelastdelete = 0;//上次扫描删除连接的时间
 			uint64_t _allsend = 0 ;//总发送
@@ -360,7 +360,7 @@ namespace ec {
 			virtual int domessage(int fd, ec::bytes& sbuf, int msgtype) = 0;
 
 #if (0 != EC_AIOSRV_TLS)
-			virtual ec::tls::srvca* getCA(int fdlisten) {
+			virtual ec::tls_srvca* getCA(int fdlisten) { //支持多证书
 				return &_ca;
 			}
 #endif
@@ -416,26 +416,26 @@ namespace ec {
 					return 0;
 #if (0 != EC_AIOSRV_TLS)
 				if (pu[0] == 22 && pu[1] == 3 && pu[2] > 0 && pu[2] <= 3) { // update client TLS protocol
-					if (!_ca._pcer.data() || !_ca._pcer.size() || !_ca._pRsaPub || !_ca._pRsaPrivate) {
+					if (!EnableProtocol((*pi)->_fdlisten, EC_AIO_PROC_TLS)) {
+						(*pi)->_time_error = ::time(nullptr);//设置延迟断开开始时间
+						return 0; //不应答,延迟断开
+					}
+					ec::tls_srvca* pCA = getCA((*pi)->_fdlisten);
+					if (!pCA) {
+						if (_plog)
+							_plog->add(CLOG_DEFAULT_MOR, "fd(%d) update TLS1.2 protocol getCA failed, no server certificate.", fd);
+						(*pi)->_time_error = ::time(nullptr);//设置延迟断开开始时间
+						return 0; //不应答,延迟断开
+					}
+					if (pCA->empty()) {
 						if (_plog)
 							_plog->add(CLOG_DEFAULT_MOR, "fd(%d) update TLS1.2 protocol failed, no server certificate", fd);
 						(*pi)->_time_error = ::time(nullptr);//设置延迟断开开始时间
 						return 0; //不应答,延迟断开
 					}
-					if (!EnableProtocol((*pi)->_fdlisten, EC_AIO_PROC_TLS)) {
-						(*pi)->_time_error = ::time(nullptr);//设置延迟断开开始时间
-						return 0; //不应答,延迟断开
-					}
-					ec::tls::srvca* pCA = getCA((*pi)->_fdlisten);
-					if (!pCA) {
-						if (_plog)
-							_plog->add(CLOG_DEFAULT_MOR, "fd(%d) update TLS1.2 protocol getCA failed.", fd);
-						(*pi)->_time_error = ::time(nullptr);//设置延迟断开开始时间
-						return 0; //不应答,延迟断开
-					}
+
 					(*pi)->_time_error = 0;
-					psession ptls = new session_tls(fd, std::move(**pi), pCA->_pcer.data(), pCA->_pcer.size(),
-						pCA->_prootcer.data(), pCA->_prootcer.size(), &pCA->_csRsa, pCA->_pRsaPrivate, _plog);
+					psession ptls = new session_tls(fd, std::move(**pi), pCA, _plog);
 					if (!ptls)
 						return -1;
 					_mapsession.set(ptls->_fd, ptls);
