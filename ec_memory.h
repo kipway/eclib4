@@ -171,8 +171,9 @@ namespace ec {
 	{
 	private:
 		size_t _sizeblk; // 内存块的大小
+		size_t _numblk;
 	public:
-		blk_alloctor_g(size_t sizeblk, size_t numblk) : _sizeblk(sizeblk)
+		blk_alloctor_g(size_t sizeblk, size_t numblk) : _sizeblk(sizeblk), _numblk(numblk)
 		{
 		}
 		inline size_t sizeblk() const

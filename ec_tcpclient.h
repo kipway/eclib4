@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
+  2025.5.15 增加每次最多recv次数宏 EC_TCP_CLIENT_POLLINREADTIMES
   2024.12.5 增加发送完成通知
   2024.11.25 增加ec::alloctor new支持
   2024.6.7  sock5代理也改为异步发送,增加多客户端netio事件监听. 
@@ -54,6 +55,9 @@ You may obtain a copy of the License at http://www.apache.org/licenses/LICENSE-2
 #endif
 #endif
 
+#ifndef EC_TCP_CLIENT_POLLINREADTIMES //每次POLLIN最多读取次数，每次18Kbytes
+#define EC_TCP_CLIENT_POLLINREADTIMES 8
+#endif
 namespace ec
 {
 	class tcp_c
@@ -554,7 +558,7 @@ namespace ec
 				}
 			}
 			if (revents & POLLIN) {
-				int nmax = 8;
+				int nmax = EC_TCP_CLIENT_POLLINREADTIMES;
 				while (nmax && _status >= st_connected) {
 					--nmax;
 					int nr = ::recv(_sock, (char*)_rbuf, (int)sizeof(_rbuf), 0);

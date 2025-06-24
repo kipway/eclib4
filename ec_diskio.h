@@ -495,7 +495,7 @@ namespace ec
 		cdir(const char* utf8path)//spath with'/'
 		{
 #ifdef _WIN32
-			size_t zn = -1;
+			size_t zn = (size_t)(-1);
 			char szFilter[1024];
 			hFind = INVALID_HANDLE_VALUE;
 			memset(&FindFileData, 0, sizeof(FindFileData));

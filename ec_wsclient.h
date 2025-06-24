@@ -3,6 +3,7 @@
 \author	jiangyong
 \email  kipway@outlook.com
 \update
+    2025.3.11 fix ParseOneFrame
   2023.8.10 update ,add request failed http start line out to log
   2023.7.5  remove ec::memory
   2023.6.25 add sendPingMsgMsg
@@ -10,7 +11,7 @@ ws_c
 	class for websocket client
 	tcp_c -> ws_c
 
-eclib 4.0 Copyright (c) 2017-2024, kipway
+eclib 4.0 Copyright (c) 2017-2025, kipway
 source repository : https://github.com/kipway
 
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -206,7 +207,7 @@ namespace ec
 			_opcode = WS_OP_TXT;
 		}
 
-		int  ParseOneFrame(const char* stxt, size_t usize, int& fin)// reuturn >0 is do bytes
+		int  ParseOneFrame(const char* stxt, size_t usize, int& fin)// reuturn >0 is do bytes; -1:error; 0:wait
 		{
 			int comp = 0;
 			fin = 0;
@@ -231,7 +232,7 @@ namespace ec
 			if (payloadlen == 126) {
 				datapos += 2;
 				if (usize < datapos)
-					return he_waitdata;
+					return 0;
 
 				datalen = pu[2];
 				datalen <<= 8;
@@ -240,7 +241,7 @@ namespace ec
 			else if (payloadlen == 127) {
 				datapos += 8;
 				if (usize < datapos)
-					return he_waitdata;
+					return 0;
 
 				for (i = 0; i < 8; i++) {
 					if (i > 0)
@@ -251,7 +252,7 @@ namespace ec
 			else {
 				datalen = payloadlen;
 				if (usize < datapos)
-					return he_waitdata;
+					return 0;
 			}
 			if (datalen > MAXSIZE_WS_READ_FRAME || _wsmsg.size() + datalen > MAXSIZE_WS_READ_PKG)//outof size limit
 				return -1;
